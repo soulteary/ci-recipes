@@ -17,6 +17,8 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 
+- Describe the centralized Grantseal quality-doc generator in its generated
+  English and Chinese provenance markers instead of naming the removed wrapper.
 - Accept Git's canonical global PAX commit header when creating isolated
   Stargate snapshots while continuing to reject arbitrary PAX metadata.
 - Detect Stargate documentation examples that enable `htpasswd` batch-password

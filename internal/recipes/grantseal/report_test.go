@@ -251,7 +251,7 @@ func TestRenderQualityBlockMatchesLegacyLayout(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := `<!-- BEGIN:GENERATED-COVERAGE -->
-<!-- Generated from .github/go-test-report.json by scripts/generate-quality-docs.sh. Do not edit by hand. -->
+<!-- Generated from .github/go-test-report.json by ci-recipes grantseal generate-quality-docs. Do not edit by hand. -->
 
 ## Environment of record
 
@@ -293,7 +293,7 @@ func TestRenderQualityBlockMatchesLegacyChineseLayout(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := `<!-- BEGIN:GENERATED-COVERAGE -->
-<!-- 由 scripts/generate-quality-docs.sh 从 .github/go-test-report.json 生成，请勿手工编辑。 -->
+<!-- 由 ci-recipes grantseal generate-quality-docs 从 .github/go-test-report.json 生成，请勿手工编辑。 -->
 
 ## 记录环境
 
