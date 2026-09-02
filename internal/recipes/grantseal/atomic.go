@@ -1,13 +1,17 @@
 package grantseal
 
 import (
+	"context"
 	"errors"
 	"io/fs"
 	"os"
 	"path/filepath"
 )
 
-func atomicWriteFile(path string, data []byte) error {
+func atomicWriteFile(ctx context.Context, path string, data []byte) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	info, err := os.Lstat(path)
 	if err != nil {
 		return err
@@ -35,6 +39,9 @@ func atomicWriteFile(path string, data []byte) error {
 		return err
 	}
 	if err := tmp.Close(); err != nil {
+		return err
+	}
+	if err := ctx.Err(); err != nil {
 		return err
 	}
 	if err := os.Rename(tmpName, path); err != nil {
