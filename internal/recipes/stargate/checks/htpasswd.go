@@ -227,11 +227,6 @@ var envOperandOptions = map[string]bool{
 	"-u": true, "--unset": true,
 }
 
-var ioniceOperandOptions = map[string]bool{
-	"-c": true, "--class": true,
-	"-n": true, "--classdata": true,
-}
-
 func skipWrapperOptions(words []string, index int, operandOptions map[string]bool) int {
 	for index < len(words) {
 		word := words[index]
@@ -289,10 +284,10 @@ func skipIoniceOptions(words []string, index int) (int, bool) {
 		if word == "-" || !strings.HasPrefix(word, "-") {
 			return index, true
 		}
-		if ioniceQueryOption(word) {
+		consumeNext, executable := parseIoniceOption(word)
+		if !executable {
 			return index, false
 		}
-		consumeNext := wrapperOptionConsumesNext(word, ioniceOperandOptions)
 		index++
 		if consumeNext && index < len(words) {
 			index++
@@ -301,16 +296,61 @@ func skipIoniceOptions(words []string, index int) (int, bool) {
 	return index, true
 }
 
-func ioniceQueryOption(word string) bool {
+type ioniceOption struct {
+	short   byte
+	long    string
+	operand bool
+	query   bool
+}
+
+var ioniceOptions = []ioniceOption{
+	{short: 'c', long: "class", operand: true},
+	{short: 'n', long: "classdata", operand: true},
+	{short: 'p', long: "pid", operand: true, query: true},
+	{short: 'P', long: "pgid", operand: true, query: true},
+	{short: 't', long: "ignore"},
+	{short: 'u', long: "uid", operand: true, query: true},
+	{short: 'h', long: "help", query: true},
+	{short: 'V', long: "version", query: true},
+}
+
+func parseIoniceOption(word string) (consumeNext, executable bool) {
 	if strings.HasPrefix(word, "--") {
-		name, _, _ := strings.Cut(word, "=")
-		switch name {
-		case "--pid", "--pgid", "--uid", "--help", "--version":
-			return true
+		name, _, attached := strings.Cut(word[2:], "=")
+		matched := ioniceOption{}
+		matches := 0
+		for _, option := range ioniceOptions {
+			if option.long == name {
+				matched = option
+				matches = 1
+				break
+			}
+			if name != "" && strings.HasPrefix(option.long, name) {
+				matched = option
+				matches++
+			}
 		}
-		return false
+		if matches != 1 || matched.query || attached && !matched.operand {
+			return false, false
+		}
+		return matched.operand && !attached, true
 	}
-	return strings.ContainsAny(word[1:], "pPuhV")
+	for offset := 1; offset < len(word); offset++ {
+		var matched *ioniceOption
+		for optionIndex := range ioniceOptions {
+			if ioniceOptions[optionIndex].short == word[offset] {
+				matched = &ioniceOptions[optionIndex]
+				break
+			}
+		}
+		if matched == nil || matched.query {
+			return false, false
+		}
+		if matched.operand {
+			return offset == len(word)-1, true
+		}
+	}
+	return false, true
 }
 
 func markdownCommandPrefix(word string) bool {
