@@ -12,12 +12,11 @@ import (
 func unsafeHTPasswdBatchInvocations(text string) []struct{} {
 	violations := make([]struct{}, 0)
 	for _, command := range shellCommandFragments(strings.ReplaceAll(text, "\\\n", " ")) {
-		words := shellLiteralWords(command)
-		commandIndex := directHTPasswdCommand(words)
-		if commandIndex < 0 {
+		commandWords, ok := htpasswdCommandWords(shellLiteralWords(command))
+		if !ok {
 			continue
 		}
-		for _, word := range words[commandIndex+1:] {
+		for _, word := range commandWords[1:] {
 			if word == "--" {
 				break
 			}
@@ -113,7 +112,8 @@ func markdownRootPrompt(text string, lineStart, index int) bool {
 	} else {
 		lineEnd += index + 1
 	}
-	return directHTPasswdCommand(shellLiteralWords(text[index+1:lineEnd])) >= 0
+	_, ok := htpasswdCommandWords(shellLiteralWords(text[index+1 : lineEnd]))
+	return ok
 }
 
 func shellLiteralWords(command string) []string {
@@ -170,92 +170,271 @@ func shellLiteralWords(command string) []string {
 	return words
 }
 
-func directHTPasswdCommand(words []string) int {
+func htpasswdCommandWords(words []string) ([]string, bool) {
 	index := 0
 	for index < len(words) && markdownCommandPrefix(words[index]) {
 		index++
 	}
-	for index < len(words) {
+	for wrapperDepth := 0; index < len(words) && wrapperDepth < 64; wrapperDepth++ {
 		word := words[index]
-		if strings.ContainsRune(word, '=') && !strings.HasPrefix(word, "=") {
+		if shellAssignmentWord(word) {
 			index++
 			continue
 		}
 		switch filepath.Base(word) {
 		case "htpasswd":
-			return index
+			return words[index:], true
 		case "sudo":
-			index = skipWrapperOptions(words, index+1, sudoOperandOptions)
+			var executable bool
+			index, executable = skipSudoOptions(words, index+1)
+			if !executable {
+				return nil, false
+			}
 		case "env":
-			index = skipWrapperOptions(words, index+1, envOperandOptions)
+			var executable bool
+			words, executable = unwrapEnvWords(words[index+1:])
+			if !executable {
+				return nil, false
+			}
+			index = 0
 		case "command":
 			var executable bool
 			index, executable = skipCommandOptions(words, index+1)
 			if !executable {
-				return -1
+				return nil, false
 			}
 		case "ionice":
 			var executable bool
 			index, executable = skipIoniceOptions(words, index+1)
 			if !executable {
-				return -1
+				return nil, false
 			}
 		default:
-			return -1
+			return nil, false
 		}
 	}
-	return -1
+	return nil, false
 }
 
-var sudoOperandOptions = map[string]bool{
-	"-C": true, "--close-from": true,
-	"-D": true, "--chdir": true,
-	"-g": true, "--group": true,
-	"-h": true, "--host": true,
-	"-p": true, "--prompt": true,
-	"-R": true, "--chroot": true,
-	"-r": true, "--role": true,
-	"-T": true, "--command-timeout": true,
-	"-t": true, "--type": true,
-	"-U": true, "--other-user": true,
-	"-u": true, "--user": true,
+func shellAssignmentWord(word string) bool {
+	name, _, found := strings.Cut(word, "=")
+	if !found || name == "" {
+		return false
+	}
+	for index := 0; index < len(name); index++ {
+		character := name[index]
+		if character == '_' || character >= 'a' && character <= 'z' || character >= 'A' && character <= 'Z' {
+			continue
+		}
+		if index > 0 && character >= '0' && character <= '9' {
+			continue
+		}
+		return false
+	}
+	return true
 }
 
-var envOperandOptions = map[string]bool{
-	"-C": true, "--chdir": true,
-	"-S": true, "--split-string": true,
-	"-u": true, "--unset": true,
+type wrapperOption struct {
+	short        byte
+	long         string
+	operand      bool
+	optional     bool
+	nonExecuting bool
+	split        bool
 }
 
-func skipWrapperOptions(words []string, index int, operandOptions map[string]bool) int {
+var sudoOptions = []wrapperOption{
+	{short: 'A', long: "askpass"},
+	{short: 'b', long: "background"},
+	{short: 'B', long: "bell"},
+	{short: 'C', long: "close-from", operand: true},
+	{short: 'D', long: "chdir", operand: true},
+	{short: 'E', long: "preserve-env", optional: true},
+	{short: 'e', long: "edit", nonExecuting: true},
+	{short: 'g', long: "group", operand: true},
+	{short: 'H', long: "set-home"},
+	{short: 'h', long: "host", operand: true},
+	{long: "help", nonExecuting: true},
+	{short: 'i', long: "login"},
+	{short: 'K', long: "remove-timestamp", nonExecuting: true},
+	{short: 'k', long: "reset-timestamp"},
+	{short: 'l', long: "list", nonExecuting: true},
+	{short: 'n', long: "non-interactive"},
+	{short: 'N', long: "no-update"},
+	{short: 'P', long: "preserve-groups"},
+	{short: 'p', long: "prompt", operand: true},
+	{short: 'R', long: "chroot", operand: true},
+	{short: 'r', long: "role", operand: true},
+	{short: 'S', long: "stdin"},
+	{short: 's', long: "shell"},
+	{short: 't', long: "type", operand: true},
+	{short: 'T', long: "command-timeout", operand: true},
+	{short: 'U', long: "other-user", operand: true},
+	{short: 'u', long: "user", operand: true},
+	{short: 'V', long: "version", nonExecuting: true},
+	{short: 'v', long: "validate", nonExecuting: true},
+}
+
+func skipSudoOptions(words []string, index int) (int, bool) {
 	for index < len(words) {
 		word := words[index]
 		if word == "--" {
-			return index + 1
+			return index + 1, true
 		}
 		if word == "-" || !strings.HasPrefix(word, "-") {
-			return index
+			return index, true
 		}
-		consumeNext := wrapperOptionConsumesNext(word, operandOptions)
+		consumeNext, executable := parseWrapperOption(word, sudoOptions)
+		if !executable {
+			return index, false
+		}
 		index++
 		if consumeNext && index < len(words) {
 			index++
 		}
 	}
-	return index
+	return index, true
 }
 
-func wrapperOptionConsumesNext(word string, operandOptions map[string]bool) bool {
+func parseWrapperOption(word string, options []wrapperOption) (consumeNext, executable bool) {
 	if strings.HasPrefix(word, "--") {
-		name, _, attached := strings.Cut(word, "=")
-		return operandOptions[name] && !attached
+		name, _, attached := strings.Cut(word[2:], "=")
+		matched, ok := matchWrapperLongOption(name, options)
+		if !ok || matched.nonExecuting || attached && !matched.operand && !matched.optional {
+			return false, false
+		}
+		return matched.operand && !attached, true
 	}
-	for index := 1; index < len(word); index++ {
-		if operandOptions["-"+word[index:index+1]] {
-			return index == len(word)-1
+	for offset := 1; offset < len(word); offset++ {
+		matched, ok := matchWrapperShortOption(word[offset], options)
+		if !ok || matched.nonExecuting {
+			return false, false
+		}
+		if matched.operand {
+			return offset == len(word)-1, true
 		}
 	}
-	return false
+	return false, true
+}
+
+func matchWrapperLongOption(name string, options []wrapperOption) (wrapperOption, bool) {
+	matched := wrapperOption{}
+	matches := 0
+	for _, option := range options {
+		if option.long == name {
+			return option, true
+		}
+		if name != "" && strings.HasPrefix(option.long, name) {
+			matched = option
+			matches++
+		}
+	}
+	return matched, matches == 1
+}
+
+func matchWrapperShortOption(short byte, options []wrapperOption) (wrapperOption, bool) {
+	for _, option := range options {
+		if option.short == short {
+			return option, true
+		}
+	}
+	return wrapperOption{}, false
+}
+
+var envOptions = []wrapperOption{
+	{short: 'i', long: "ignore-environment"},
+	{short: '0', long: "null", nonExecuting: true},
+	{short: 'u', long: "unset", operand: true},
+	{short: 'C', long: "chdir", operand: true},
+	{short: 'S', long: "split-string", operand: true, split: true},
+	{long: "block-signal", optional: true},
+	{long: "default-signal", optional: true},
+	{long: "ignore-signal", optional: true},
+	{long: "list-signal-handling"},
+	{short: 'v', long: "debug"},
+	{long: "help", nonExecuting: true},
+	{long: "version", nonExecuting: true},
+}
+
+func unwrapEnvWords(arguments []string) ([]string, bool) {
+	words := append([]string(nil), arguments...)
+	for expansion := 0; expansion < 64; expansion++ {
+		expandedSplit := false
+		for index := 0; index < len(words); {
+			word := words[index]
+			if shellAssignmentWord(word) {
+				index++
+				continue
+			}
+			if word == "--" {
+				return words[index+1:], true
+			}
+			if word == "-" {
+				index++
+				continue
+			}
+			if !strings.HasPrefix(word, "-") {
+				return words[index:], true
+			}
+
+			option, value, attached, ok := parseEnvOption(word)
+			if !ok || option.nonExecuting {
+				return nil, false
+			}
+			next := index + 1
+			if option.operand && !attached {
+				if next >= len(words) {
+					return nil, false
+				}
+				value = words[next]
+				next++
+			}
+			if !option.split {
+				index = next
+				continue
+			}
+
+			splitWords := shellLiteralWords(value)
+			expanded := make([]string, 0, len(splitWords)+len(words)-next)
+			expanded = append(expanded, splitWords...)
+			expanded = append(expanded, words[next:]...)
+			words = expanded
+			expandedSplit = true
+			break
+		}
+		if !expandedSplit {
+			return nil, false
+		}
+	}
+	return nil, false
+}
+
+func parseEnvOption(word string) (option wrapperOption, value string, attached, ok bool) {
+	if strings.HasPrefix(word, "--") {
+		name, value, attached := strings.Cut(word[2:], "=")
+		option, ok := matchWrapperLongOption(name, envOptions)
+		if !ok || attached && !option.operand && !option.optional {
+			return wrapperOption{}, "", false, false
+		}
+		return option, value, attached, true
+	}
+	for offset := 1; offset < len(word); offset++ {
+		matched, found := matchWrapperShortOption(word[offset], envOptions)
+		if !found {
+			return wrapperOption{}, "", false, false
+		}
+		if matched.nonExecuting {
+			return matched, "", false, true
+		}
+		if matched.operand {
+			if offset+1 < len(word) {
+				return matched, word[offset+1:], true, true
+			}
+			return matched, "", false, true
+		}
+		option = matched
+	}
+	return option, "", false, true
 }
 
 func skipCommandOptions(words []string, index int) (int, bool) {
