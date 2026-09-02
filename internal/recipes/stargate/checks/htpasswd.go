@@ -11,7 +11,7 @@ import (
 // examples; it does not try to evaluate shell expansions.
 func unsafeHTPasswdBatchInvocations(text string) []struct{} {
 	violations := make([]struct{}, 0)
-	for _, command := range shellCommandFragments(strings.ReplaceAll(text, "\\\n", " ")) {
+	for _, command := range shellCommandFragments(text) {
 		commandWords, ok := htpasswdCommandWords(shellLiteralWords(command))
 		if !ok {
 			continue
@@ -42,16 +42,20 @@ func shellCommandFragments(text string) []string {
 	}
 	for index := 0; index < len(text); index++ {
 		character := text[index]
-		if character == '\n' || character == '\r' {
-			flush(index)
-			start = index + 1
-			lineStart = index + 1
-			quote = 0
-			escaped = false
-			continue
-		}
 		if escaped {
 			escaped = false
+			if character == '\n' {
+				lineStart = index + 1
+			}
+			continue
+		}
+		if character == '\n' || character == '\r' {
+			lineStart = index + 1
+			if quote != 0 {
+				continue
+			}
+			flush(index)
+			start = index + 1
 			continue
 		}
 		if quote != '\'' && character == '\\' {
@@ -132,6 +136,10 @@ func shellLiteralWords(command string) []string {
 	for index := 0; index < len(command); index++ {
 		character := command[index]
 		if escaped {
+			if character == '\n' {
+				escaped = false
+				continue
+			}
 			word.WriteByte(character)
 			started = true
 			escaped = false
@@ -144,7 +152,6 @@ func shellLiteralWords(command string) []string {
 				continue
 			}
 			escaped = true
-			started = true
 			continue
 		}
 		if quote != 0 {
@@ -161,7 +168,7 @@ func shellLiteralWords(command string) []string {
 			started = true
 			continue
 		}
-		if character == ' ' || character == '\t' {
+		if character == ' ' || character == '\t' || character == '\n' || character == '\r' {
 			flush()
 			continue
 		}
@@ -170,6 +177,7 @@ func shellLiteralWords(command string) []string {
 	}
 	if escaped {
 		word.WriteByte('\\')
+		started = true
 	}
 	flush()
 	return words
@@ -189,13 +197,10 @@ func htpasswdCommandWords(words []string) ([]string, bool) {
 	for index < len(words) && markdownCommandPrefix(words[index]) {
 		index++
 	}
+	for index < len(words) && shellAssignmentWord(words[index]) {
+		index++
+	}
 	for wrapperDepth := 0; index < len(words) && wrapperDepth < 64; wrapperDepth++ {
-		for index < len(words) && shellAssignmentWord(words[index]) {
-			index++
-		}
-		if index >= len(words) {
-			return nil, false
-		}
 		word := words[index]
 		switch filepath.Base(word) {
 		case "htpasswd":
