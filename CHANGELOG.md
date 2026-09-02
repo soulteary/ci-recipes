@@ -19,3 +19,5 @@ All notable changes to this project will be documented in this file.
 
 - Accept Git's canonical global PAX commit header when creating isolated
   Stargate snapshots while continuing to reject arbitrary PAX metadata.
+- Detect Stargate documentation examples that enable `htpasswd` batch-password
+  mode after earlier options without crossing shell command boundaries.
