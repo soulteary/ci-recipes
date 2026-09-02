@@ -94,6 +94,20 @@ func TestArchiveAllowlistFailsClosedOnCorruptArchive(t *testing.T) {
 	requireExitCode(t, err, 2)
 }
 
+func TestArchiveAllowlistRejectsSymlinkedArchive(t *testing.T) {
+	dir := t.TempDir()
+	target := filepath.Join(dir, "payload")
+	writeTarGzip(t, target, []tarEntry{{name: "README.md", contents: "readme"}})
+	if err := os.Symlink(target, filepath.Join(dir, "release.tar.gz")); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+	_, _, err := executeTest(t, testDeps(dir), "archive", "allowlist", ".")
+	requireExitCode(t, err, 2)
+	if !strings.Contains(err.Error(), "symbolic link") {
+		t.Fatalf("error = %v, want symbolic-link diagnostic", err)
+	}
+}
+
 func TestArchiveAllowlistVerifiesGzipTrailer(t *testing.T) {
 	valid := tarGzipBytes(t, []tarEntry{{name: "license-tool", contents: "binary"}})
 	tests := map[string][]byte{

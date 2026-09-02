@@ -162,16 +162,26 @@ func archivesAtDepth(ctx context.Context, root string, maxDepth int) ([]string, 
 			}
 			return nil
 		}
-		if depth > maxDepth || entry.Type()&os.ModeSymlink != 0 {
+		if depth > maxDepth {
 			return nil
 		}
-		if strings.HasSuffix(name, ".tar.gz") || strings.HasSuffix(name, ".zip") {
+		if entry.Type()&os.ModeSymlink != 0 {
+			if releaseArchiveName(name) {
+				return fmt.Errorf("archive candidate %q is a symbolic link", name)
+			}
+			return nil
+		}
+		if releaseArchiveName(name) {
 			result = append(result, name)
 		}
 		return nil
 	})
 	sort.Strings(result)
 	return result, err
+}
+
+func releaseArchiveName(name string) bool {
+	return strings.HasSuffix(name, ".tar.gz") || strings.HasSuffix(name, ".zip")
 }
 
 type archiveMember struct {
