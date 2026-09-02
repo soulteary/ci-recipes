@@ -470,7 +470,7 @@ func renderQualityBlock(report qualityReport, lang string) string {
 	var builder strings.Builder
 	if lang == "en" {
 		fmt.Fprintf(&builder, "%s\n", coverageBegin)
-		builder.WriteString("<!-- Generated from .github/go-test-report.json by scripts/generate-quality-docs.sh. Do not edit by hand. -->\n\n")
+		builder.WriteString("<!-- Generated from .github/go-test-report.json by ci-recipes grantseal generate-quality-docs. Do not edit by hand. -->\n\n")
 		builder.WriteString("## Environment of record\n\n")
 		fmt.Fprintf(&builder, "- Commit: %s\n- Generated (UTC): %s\n- Go version: %s\n- OS / arch: %s\n\n", commit, generatedAt, goVersion, osAndArch)
 		builder.WriteString("These values come from the `environment` block of `.github/go-test-report.json`, the single machine-readable source of truth, so they cannot drift from the recorded run.\n\n")
@@ -486,7 +486,7 @@ func renderQualityBlock(report qualityReport, lang string) string {
 		return builder.String()
 	}
 	fmt.Fprintf(&builder, "%s\n", coverageBegin)
-	builder.WriteString("<!-- 由 scripts/generate-quality-docs.sh 从 .github/go-test-report.json 生成，请勿手工编辑。 -->\n\n")
+	builder.WriteString("<!-- 由 ci-recipes grantseal generate-quality-docs 从 .github/go-test-report.json 生成，请勿手工编辑。 -->\n\n")
 	builder.WriteString("## 记录环境\n\n")
 	fmt.Fprintf(&builder, "- 提交：%s\n- 生成时间（UTC）：%s\n- Go 版本：%s\n- 操作系统 / 架构：%s\n\n", commit, generatedAt, goVersion, osAndArch)
 	builder.WriteString("这些值取自 `.github/go-test-report.json` 的 `environment` 字段（唯一的机器可读来源），因此不会与实际运行漂移。\n\n")
