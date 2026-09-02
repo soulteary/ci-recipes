@@ -216,9 +216,20 @@ func (s *sensitiveScanner) scanArtifactFile(name, shown string, applyIgnore bool
 }
 
 func (s *sensitiveScanner) gitIgnored(name string) (bool, error) {
-	rel, err := filepath.Rel(s.repoRoot, name)
+	canonicalRoot, err := filepath.EvalSymlinks(s.repoRoot)
+	if err != nil {
+		return false, usage("resolve git work-tree root %q: %v", s.repoRoot, err)
+	}
+	canonicalName, err := filepath.EvalSymlinks(name)
 	if err != nil {
 		return false, usage("resolve git-ignore path %q: %v", name, err)
+	}
+	rel, err := filepath.Rel(canonicalRoot, canonicalName)
+	if err != nil {
+		return false, usage("resolve git-ignore path %q: %v", name, err)
+	}
+	if rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) || filepath.IsAbs(rel) {
+		return false, usage("git-ignore path %q is outside work tree %q", name, s.repoRoot)
 	}
 	var stderr bytes.Buffer
 	err = s.deps.runner.Run(s.ctx, command{
@@ -327,6 +338,11 @@ func fileContainsPrivateKeyHeader(name string) (bool, error) {
 }
 
 func samePath(a, b string) bool {
+	infoA, statErrA := os.Stat(a)
+	infoB, statErrB := os.Stat(b)
+	if statErrA == nil && statErrB == nil && os.SameFile(infoA, infoB) {
+		return true
+	}
 	absA, errA := filepath.Abs(a)
 	absB, errB := filepath.Abs(b)
 	return errA == nil && errB == nil && filepath.Clean(absA) == filepath.Clean(absB)

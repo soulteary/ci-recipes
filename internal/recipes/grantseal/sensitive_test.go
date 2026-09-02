@@ -77,6 +77,32 @@ func TestSensitiveFilesGitTrackedAndIgnoredSemantics(t *testing.T) {
 	requireExitCode(t, err, 1)
 }
 
+func TestSensitiveFilesGitIgnoreThroughSymlinkedParent(t *testing.T) {
+	parent := t.TempDir()
+	realParent := filepath.Join(parent, "real")
+	realRepo := filepath.Join(realParent, "repo")
+	if err := os.MkdirAll(realRepo, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	initGitRepo(t, realRepo)
+	writeTestFile(t, filepath.Join(realRepo, ".gitignore"), "local-private.key\n")
+	writeTestFile(t, filepath.Join(realRepo, "README.md"), "clean\n")
+	runGit(t, realRepo, "add", ".gitignore", "README.md")
+	runGit(t, realRepo, "commit", "-qm", "base")
+
+	aliasParent := filepath.Join(parent, "alias")
+	if err := os.Symlink(realParent, aliasParent); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+	aliasRepo := filepath.Join(aliasParent, "repo")
+	writeTestFile(t, filepath.Join(aliasRepo, "local-private.key"), "ignored\n")
+
+	for _, target := range []string{".", aliasRepo} {
+		_, _, err := executeTest(t, testDeps(aliasRepo), "sensitive", "files", target)
+		requireExitCode(t, err, 0)
+	}
+}
+
 func TestSensitiveFilesFailsClosedWhenTrackedEnumerationFails(t *testing.T) {
 	dir := t.TempDir()
 	deps := testDeps(dir)
