@@ -285,10 +285,11 @@ func skipSudoOptions(words []string, index int) (int, bool) {
 	for index < len(words) {
 		word := words[index]
 		if word == "--" {
-			return index + 1, true
+			index++
+			break
 		}
 		if word == "-" || !strings.HasPrefix(word, "-") {
-			return index, true
+			break
 		}
 		consumeNext, executable := parseWrapperOption(word, sudoOptions)
 		if !executable {
@@ -299,7 +300,15 @@ func skipSudoOptions(words []string, index int) (int, bool) {
 			index++
 		}
 	}
+	for index < len(words) && sudoAssignmentWord(words[index]) {
+		index++
+	}
 	return index, true
+}
+
+func sudoAssignmentWord(word string) bool {
+	name, _, found := strings.Cut(word, "=")
+	return found && name != ""
 }
 
 func parseWrapperOption(word string, options []wrapperOption) (consumeNext, executable bool) {
@@ -395,7 +404,10 @@ func unwrapEnvWords(arguments []string) ([]string, bool) {
 						continue
 					}
 
-					splitWords := shellLiteralWords(value)
+					splitWords, valid := envSplitWords(value)
+					if !valid {
+						return nil, false
+					}
 					expanded := make([]string, 0, len(splitWords)+len(words)-next)
 					expanded = append(expanded, splitWords...)
 					expanded = append(expanded, words[next:]...)
@@ -419,6 +431,113 @@ func unwrapEnvWords(arguments []string) ([]string, bool) {
 
 func envAssignmentWord(word string) bool {
 	return strings.ContainsRune(word, '=')
+}
+
+func envSplitWords(value string) ([]string, bool) {
+	words := make([]string, 0)
+	var word strings.Builder
+	quote := byte(0)
+	started := false
+	flush := func() {
+		if started {
+			words = append(words, word.String())
+			word.Reset()
+			started = false
+		}
+	}
+	for index := 0; index < len(value); index++ {
+		character := value[index]
+		if quote == 0 && envSplitSpace(character) {
+			flush()
+			continue
+		}
+		if quote == 0 && character == '#' && !started {
+			return words, true
+		}
+		if character == '\'' || character == '"' {
+			if quote == 0 {
+				quote = character
+				started = true
+				continue
+			}
+			if quote == character {
+				quote = 0
+				started = true
+				continue
+			}
+			word.WriteByte(character)
+			started = true
+			continue
+		}
+		if character != '\\' {
+			word.WriteByte(character)
+			started = true
+			continue
+		}
+		if index+1 >= len(value) {
+			return nil, false
+		}
+
+		escaped := value[index+1]
+		index++
+		if quote == '\'' {
+			if escaped != '\'' && escaped != '\\' {
+				word.WriteByte('\\')
+			}
+			word.WriteByte(escaped)
+			started = true
+			continue
+		}
+		switch escaped {
+		case 'c':
+			if quote == '"' {
+				return nil, false
+			}
+			flush()
+			return words, true
+		case '_':
+			if quote == '"' {
+				word.WriteByte(' ')
+				started = true
+			} else {
+				flush()
+			}
+		case 'f':
+			word.WriteByte('\f')
+			started = true
+		case 'n':
+			word.WriteByte('\n')
+			started = true
+		case 'r':
+			word.WriteByte('\r')
+			started = true
+		case 't':
+			word.WriteByte('\t')
+			started = true
+		case 'v':
+			word.WriteByte('\v')
+			started = true
+		case '#', '$', '"', '\'', '\\':
+			word.WriteByte(escaped)
+			started = true
+		default:
+			return nil, false
+		}
+	}
+	if quote != 0 {
+		return nil, false
+	}
+	flush()
+	return words, true
+}
+
+func envSplitSpace(character byte) bool {
+	switch character {
+	case ' ', '\t', '\n', '\r', '\v', '\f':
+		return true
+	default:
+		return false
+	}
 }
 
 func parseEnvOption(word string) (option wrapperOption, value string, attached, ok bool) {
