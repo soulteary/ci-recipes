@@ -176,11 +176,13 @@ func htpasswdCommandWords(words []string) ([]string, bool) {
 		index++
 	}
 	for wrapperDepth := 0; index < len(words) && wrapperDepth < 64; wrapperDepth++ {
-		word := words[index]
-		if shellAssignmentWord(word) {
+		for index < len(words) && shellAssignmentWord(words[index]) {
 			index++
-			continue
 		}
+		if index >= len(words) {
+			return nil, false
+		}
+		word := words[index]
 		switch filepath.Base(word) {
 		case "htpasswd":
 			return words[index:], true
