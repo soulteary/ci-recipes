@@ -50,7 +50,7 @@ type dependencies struct {
 	getenv      func(string) string
 	now         func() time.Time
 	readFile    func(string) ([]byte, error)
-	writeAtomic func(string, []byte) error
+	writeAtomic func(context.Context, string, []byte) error
 }
 
 func defaultDependencies() dependencies {
@@ -137,7 +137,7 @@ func execute(ctx context.Context, deps dependencies, args []string, stdin io.Rea
 	case "report inject-environment":
 		return runInjectReportEnvironment(ctx, deps, rest, stdout, stderr)
 	case "quality docs", "quality generate":
-		return runGenerateQualityDocs(deps, rest, stdout, stderr)
+		return runGenerateQualityDocs(ctx, deps, rest, stdout, stderr)
 	default:
 		return usage("unknown grantseal recipe %q", args[0]+" "+args[1])
 	}
