@@ -46,7 +46,10 @@ func runInjectReportEnvironment(ctx context.Context, deps dependencies, args []s
 	if err != nil {
 		return usage("parse report %q: %v", display, err)
 	}
-	environment := deriveReportEnvironment(ctx, deps)
+	environment, err := deriveReportEnvironment(ctx, deps)
+	if err != nil {
+		return usage("collect report environment: %v", err)
+	}
 	envJSON, err := json.Marshal(environment)
 	if err != nil {
 		return usage("encode report environment: %v", err)
@@ -56,6 +59,9 @@ func runInjectReportEnvironment(ctx context.Context, deps dependencies, args []s
 	if err != nil {
 		return usage("encode report %q: %v", display, err)
 	}
+	if err := ctx.Err(); err != nil {
+		return usage("write report %q canceled: %v", display, err)
+	}
 	if err := deps.writeAtomic(name, output); err != nil {
 		return usage("write report %q atomically: %v", display, err)
 	}
@@ -64,15 +70,30 @@ func runInjectReportEnvironment(ctx context.Context, deps dependencies, args []s
 	return nil
 }
 
-func deriveReportEnvironment(ctx context.Context, deps dependencies) reportEnvironment {
+func deriveReportEnvironment(ctx context.Context, deps dependencies) (reportEnvironment, error) {
 	value := func(key string) string {
 		return strings.TrimSpace(deps.getenv(key))
 	}
+	commandOutput := func(name string, args ...string) ([]byte, error) {
+		output, err := runOutput(ctx, deps, name, args...)
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return nil, ctxErr
+		}
+		if err != nil {
+			return nil, nil
+		}
+		return output, nil
+	}
+	if err := ctx.Err(); err != nil {
+		return reportEnvironment{}, err
+	}
 	commit := value("REPORT_COMMIT")
 	if commit == "" {
-		if output, err := runOutput(ctx, deps, "git", "rev-parse", "HEAD"); err == nil {
-			commit = strings.TrimSpace(string(output))
+		output, err := commandOutput("git", "rev-parse", "HEAD")
+		if err != nil {
+			return reportEnvironment{}, err
 		}
+		commit = strings.TrimSpace(string(output))
 	}
 	if commit == "" {
 		commit = "unknown"
@@ -83,11 +104,13 @@ func deriveReportEnvironment(ctx context.Context, deps dependencies) reportEnvir
 	}
 	goVersion := value("REPORT_GO_VERSION")
 	if goVersion == "" {
-		if output, err := runOutput(ctx, deps, "go", "version"); err == nil {
-			parts := strings.Fields(string(output))
-			if len(parts) >= 3 {
-				goVersion = parts[2]
-			}
+		output, err := commandOutput("go", "version")
+		if err != nil {
+			return reportEnvironment{}, err
+		}
+		parts := strings.Fields(string(output))
+		if len(parts) >= 3 {
+			goVersion = parts[2]
 		}
 	}
 	if goVersion == "" {
@@ -95,23 +118,30 @@ func deriveReportEnvironment(ctx context.Context, deps dependencies) reportEnvir
 	}
 	goos := value("REPORT_OS")
 	if goos == "" {
-		if output, err := runOutput(ctx, deps, "go", "env", "GOOS"); err == nil {
-			goos = strings.TrimSpace(string(output))
+		output, err := commandOutput("go", "env", "GOOS")
+		if err != nil {
+			return reportEnvironment{}, err
 		}
+		goos = strings.TrimSpace(string(output))
 	}
 	if goos == "" {
 		goos = "unknown"
 	}
 	arch := value("REPORT_ARCH")
 	if arch == "" {
-		if output, err := runOutput(ctx, deps, "go", "env", "GOARCH"); err == nil {
-			arch = strings.TrimSpace(string(output))
+		output, err := commandOutput("go", "env", "GOARCH")
+		if err != nil {
+			return reportEnvironment{}, err
 		}
+		arch = strings.TrimSpace(string(output))
 	}
 	if arch == "" {
 		arch = "unknown"
 	}
-	return reportEnvironment{Commit: commit, GeneratedAt: generatedAt, GoVersion: goVersion, OS: goos, Arch: arch}
+	if err := ctx.Err(); err != nil {
+		return reportEnvironment{}, err
+	}
+	return reportEnvironment{Commit: commit, GeneratedAt: generatedAt, GoVersion: goVersion, OS: goos, Arch: arch}, nil
 }
 
 func parseOrderedJSONObject(data []byte) ([]orderedJSONField, error) {
