@@ -40,6 +40,8 @@ func TestUnsafeHTPasswdBatchInvocations(t *testing.T) {
 		{name: "wrapped env shell-quoted literal newline", text: "sudo env -S 'htpasswd\n-bn password'", want: 1},
 		{name: "attached env shell-quoted literal newline", text: "env -S'htpasswd\n-bn password'", want: 1},
 		{name: "long env shell-quoted literal newline", text: "env --split-string='htpasswd\n-bn password'", want: 1},
+		{name: "nested env shell-quoted literal newline", text: "env env -S 'htpasswd\n-bn password'", want: 1},
+		{name: "split nested env shell-quoted literal newline", text: "env -S 'env -S' 'htpasswd\n-bn password'", want: 1},
 		{name: "env attached split string", text: `env -S'htpasswd -C 10 -bn "" password'`, want: 1},
 		{name: "env long split string", text: `env --split-string='htpasswd -C 10 -bn "" password'`, want: 1},
 		{name: "env abbreviated split string", text: `env --split='htpasswd -C 10 -bn "" password'`, want: 1},
