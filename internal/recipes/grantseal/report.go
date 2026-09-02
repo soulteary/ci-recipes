@@ -62,7 +62,7 @@ func runInjectReportEnvironment(ctx context.Context, deps dependencies, args []s
 	if err := ctx.Err(); err != nil {
 		return usage("write report %q canceled: %v", display, err)
 	}
-	if err := deps.writeAtomic(name, output); err != nil {
+	if err := deps.writeAtomic(ctx, name, output); err != nil {
 		return usage("write report %q atomically: %v", display, err)
 	}
 	fmt.Fprintf(stdout, "injected environment into %s: commit=%q generated_at=%q go_version=%q os=%q arch=%q\n",
@@ -351,7 +351,7 @@ func parseRequiredJSONNumber(data json.RawMessage) (json.Number, error) {
 	return number, nil
 }
 
-func runGenerateQualityDocs(deps dependencies, args []string, stdout, _ io.Writer) error {
+func runGenerateQualityDocs(ctx context.Context, deps dependencies, args []string, stdout, _ io.Writer) error {
 	if len(args) > 1 {
 		return usage("usage: quality docs [REPO_ROOT]")
 	}
@@ -413,7 +413,7 @@ func runGenerateQualityDocs(deps dependencies, args []string, stdout, _ io.Write
 		}
 		rendered = append(rendered, renderedQualityTarget{name: target.name, original: current, data: updated})
 	}
-	if err := commitQualityTargets(deps, rendered); err != nil {
+	if err := commitQualityTargets(ctx, deps, rendered); err != nil {
 		return usage("write quality docs atomically: %v", err)
 	}
 	for _, target := range rendered {
@@ -427,13 +427,14 @@ func runGenerateQualityDocs(deps dependencies, args []string, stdout, _ io.Write
 	return nil
 }
 
-func commitQualityTargets(deps dependencies, targets []renderedQualityTarget) error {
+func commitQualityTargets(ctx context.Context, deps dependencies, targets []renderedQualityTarget) error {
 	for index, target := range targets {
-		if err := deps.writeAtomic(target.name, target.data); err != nil {
+		if err := deps.writeAtomic(ctx, target.name, target.data); err != nil {
 			var rollbackFailures []string
+			rollbackContext := context.WithoutCancel(ctx)
 			for rollbackIndex := index - 1; rollbackIndex >= 0; rollbackIndex-- {
 				previous := targets[rollbackIndex]
-				if rollbackErr := deps.writeAtomic(previous.name, previous.original); rollbackErr != nil {
+				if rollbackErr := deps.writeAtomic(rollbackContext, previous.name, previous.original); rollbackErr != nil {
 					rollbackFailures = append(rollbackFailures, fmt.Sprintf("%q: %v", previous.name, rollbackErr))
 				}
 			}
