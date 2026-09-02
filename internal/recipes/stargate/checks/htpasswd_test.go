@@ -62,6 +62,7 @@ func TestUnsafeHTPasswdBatchInvocations(t *testing.T) {
 		{name: "sudo abbreviated version", text: `sudo --ver htpasswd -bn`},
 		{name: "sudo remove timestamp", text: `sudo -K htpasswd -bn`},
 		{name: "sudo long remove timestamp", text: `sudo --remove-timestamp htpasswd -bn`},
+		{name: "sudo list-mode other user", text: `sudo -U root htpasswd -bn`},
 		{name: "sudo long help", text: `sudo --help htpasswd -bn`},
 		{name: "sudo ambiguous long option", text: `sudo --preserve htpasswd -bn`},
 		{name: "env split invokes another command", text: `env -S 'printf htpasswd -bn'`},
