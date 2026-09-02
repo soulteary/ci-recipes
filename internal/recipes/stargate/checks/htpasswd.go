@@ -223,6 +223,10 @@ func shellAssignmentWord(word string) bool {
 	if !found || name == "" {
 		return false
 	}
+	name = strings.TrimSuffix(name, "+")
+	if name == "" {
+		return false
+	}
 	for index := 0; index < len(name); index++ {
 		character := name[index]
 		if character == '_' || character >= 'a' && character <= 'z' || character >= 'A' && character <= 'Z' {
@@ -360,55 +364,61 @@ var envOptions = []wrapperOption{
 
 func unwrapEnvWords(arguments []string) ([]string, bool) {
 	words := append([]string(nil), arguments...)
+	options := true
 	for expansion := 0; expansion < 64; expansion++ {
 		expandedSplit := false
 		for index := 0; index < len(words); {
 			word := words[index]
-			if shellAssignmentWord(word) {
-				index++
-				continue
-			}
-			if word == "--" {
-				return words[index+1:], true
-			}
-			if word == "-" {
-				index++
-				continue
-			}
-			if !strings.HasPrefix(word, "-") {
-				return words[index:], true
-			}
-
-			option, value, attached, ok := parseEnvOption(word)
-			if !ok || option.nonExecuting {
-				return nil, false
-			}
-			next := index + 1
-			if option.operand && !attached {
-				if next >= len(words) {
-					return nil, false
+			if options {
+				if word == "--" || word == "-" {
+					options = false
+					index++
+					continue
 				}
-				value = words[next]
-				next++
+				if !strings.HasPrefix(word, "-") {
+					options = false
+				} else {
+					option, value, attached, ok := parseEnvOption(word)
+					if !ok || option.nonExecuting {
+						return nil, false
+					}
+					next := index + 1
+					if option.operand && !attached {
+						if next >= len(words) {
+							return nil, false
+						}
+						value = words[next]
+						next++
+					}
+					if !option.split {
+						index = next
+						continue
+					}
+
+					splitWords := shellLiteralWords(value)
+					expanded := make([]string, 0, len(splitWords)+len(words)-next)
+					expanded = append(expanded, splitWords...)
+					expanded = append(expanded, words[next:]...)
+					words = expanded
+					expandedSplit = true
+					break
+				}
 			}
-			if !option.split {
-				index = next
+			if envAssignmentWord(word) {
+				index++
 				continue
 			}
-
-			splitWords := shellLiteralWords(value)
-			expanded := make([]string, 0, len(splitWords)+len(words)-next)
-			expanded = append(expanded, splitWords...)
-			expanded = append(expanded, words[next:]...)
-			words = expanded
-			expandedSplit = true
-			break
+			return words[index:], true
 		}
 		if !expandedSplit {
 			return nil, false
 		}
 	}
 	return nil, false
+}
+
+func envAssignmentWord(word string) bool {
+	return strings.ContainsRune(word, '=')
 }
 
 func parseEnvOption(word string) (option wrapperOption, value string, attached, ok bool) {
