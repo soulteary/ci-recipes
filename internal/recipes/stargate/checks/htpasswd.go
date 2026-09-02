@@ -45,9 +45,10 @@ func shellCommandFragments(text string) []string {
 		character := text[index]
 		if escaped {
 			escaped = false
-			if character == '\n' {
+			if character == '\n' || character == '\r' {
 				lineStart = index + 1
-				if quote != 0 && !quoteMultiline {
+				if quote != 0 && !quoteMultiline &&
+					(character == '\r' || !quotedWordContinuationCloses(text, index+1, quote)) {
 					flush(index)
 					start = index + 1
 					quote = 0
@@ -107,6 +108,32 @@ func shellCommandFragments(text string) []string {
 	}
 	flush(len(text))
 	return fragments
+}
+
+// quotedWordContinuationCloses reports whether the physical line following an
+// escaped newline closes the current quoted word before any whitespace. This
+// preserves real shell continuations such as "-\\\nbn" without allowing an
+// unmatched prose quote to consume a later command line.
+func quotedWordContinuationCloses(text string, start int, quote byte) bool {
+	escaped := false
+	for index := start; index < len(text); index++ {
+		character := text[index]
+		if escaped {
+			escaped = false
+			continue
+		}
+		if quote != '\'' && character == '\\' {
+			escaped = true
+			continue
+		}
+		if character == quote {
+			return true
+		}
+		if character == ' ' || character == '\t' || character == '\n' || character == '\r' {
+			return false
+		}
+	}
+	return false
 }
 
 // envSplitOperandAtQuote reports whether a quote which starts immediately
