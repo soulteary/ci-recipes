@@ -25,3 +25,5 @@ All notable changes to this project will be documented in this file.
   mode after earlier options, root prompts, or command wrappers such as
   `sudo`, `env`, `command`, and execution-form `ionice`, without crossing shell
   command or comment boundaries.
+- Reject symlinked Grantseal release-archive candidates instead of silently
+  treating the archive directory as empty.
