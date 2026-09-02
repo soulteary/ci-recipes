@@ -480,6 +480,38 @@ func TestAtomicWritePreservesMode(t *testing.T) {
 	}
 }
 
+func TestAtomicWriteRestoresWhenCanceledAtCommit(t *testing.T) {
+	dir := t.TempDir()
+	name := filepath.Join(dir, "file")
+	original := []byte("old")
+	if err := os.WriteFile(name, original, 0o640); err != nil {
+		t.Fatal(err)
+	}
+	ctx := &cancelOnErrCallContext{
+		Context:  context.Background(),
+		cancelAt: 3,
+		done:     make(chan struct{}),
+	}
+	err := atomicWriteFile(ctx, name, []byte("new"))
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("error = %v, want context.Canceled", err)
+	}
+	got, readErr := os.ReadFile(name)
+	if readErr != nil {
+		t.Fatal(readErr)
+	}
+	if !bytes.Equal(got, original) {
+		t.Fatalf("input changed after commit-time cancellation: %q", got)
+	}
+	entries, readDirErr := os.ReadDir(dir)
+	if readDirErr != nil {
+		t.Fatal(readDirErr)
+	}
+	if len(entries) != 1 || entries[0].Name() != filepath.Base(name) {
+		t.Fatalf("temporary files remain after rollback: %v", entries)
+	}
+}
+
 func TestAtomicWriteRejectsSymlink(t *testing.T) {
 	dir := t.TempDir()
 	target := filepath.Join(dir, "target")
@@ -495,4 +527,28 @@ func TestAtomicWriteRejectsSymlink(t *testing.T) {
 	if string(data) != "old" {
 		t.Fatalf("symlink target changed: %q", data)
 	}
+}
+
+type cancelOnErrCallContext struct {
+	context.Context
+	cancelAt int
+	calls    int
+	done     chan struct{}
+	canceled bool
+}
+
+func (ctx *cancelOnErrCallContext) Done() <-chan struct{} {
+	return ctx.done
+}
+
+func (ctx *cancelOnErrCallContext) Err() error {
+	ctx.calls++
+	if ctx.calls < ctx.cancelAt {
+		return nil
+	}
+	if !ctx.canceled {
+		close(ctx.done)
+		ctx.canceled = true
+	}
+	return context.Canceled
 }
