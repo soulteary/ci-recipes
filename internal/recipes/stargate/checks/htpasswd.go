@@ -194,6 +194,12 @@ func directHTPasswdCommand(words []string) int {
 			if !executable {
 				return -1
 			}
+		case "ionice":
+			var executable bool
+			index, executable = skipIoniceOptions(words, index+1)
+			if !executable {
+				return -1
+			}
 		default:
 			return -1
 		}
@@ -219,6 +225,11 @@ var envOperandOptions = map[string]bool{
 	"-C": true, "--chdir": true,
 	"-S": true, "--split-string": true,
 	"-u": true, "--unset": true,
+}
+
+var ioniceOperandOptions = map[string]bool{
+	"-c": true, "--class": true,
+	"-n": true, "--classdata": true,
 }
 
 func skipWrapperOptions(words []string, index int, operandOptions map[string]bool) int {
@@ -267,6 +278,39 @@ func skipCommandOptions(words []string, index int) (int, bool) {
 		index++
 	}
 	return index, true
+}
+
+func skipIoniceOptions(words []string, index int) (int, bool) {
+	for index < len(words) {
+		word := words[index]
+		if word == "--" {
+			return index + 1, true
+		}
+		if word == "-" || !strings.HasPrefix(word, "-") {
+			return index, true
+		}
+		if ioniceQueryOption(word) {
+			return index, false
+		}
+		consumeNext := wrapperOptionConsumesNext(word, ioniceOperandOptions)
+		index++
+		if consumeNext && index < len(words) {
+			index++
+		}
+	}
+	return index, true
+}
+
+func ioniceQueryOption(word string) bool {
+	if strings.HasPrefix(word, "--") {
+		name, _, _ := strings.Cut(word, "=")
+		switch name {
+		case "--pid", "--pgid", "--uid", "--help", "--version":
+			return true
+		}
+		return false
+	}
+	return strings.ContainsAny(word[1:], "pPuhV")
 }
 
 func markdownCommandPrefix(word string) bool {
