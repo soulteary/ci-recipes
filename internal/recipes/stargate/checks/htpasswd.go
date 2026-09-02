@@ -47,6 +47,12 @@ func shellCommandFragments(text string) []string {
 			escaped = false
 			if character == '\n' {
 				lineStart = index + 1
+				if quote != 0 && !quoteMultiline {
+					flush(index)
+					start = index + 1
+					quote = 0
+					quoteMultiline = false
+				}
 			}
 			continue
 		}
