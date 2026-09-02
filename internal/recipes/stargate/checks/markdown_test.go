@@ -57,6 +57,7 @@ func TestFencedBlockParserCommonMarkEdges(t *testing.T) {
 		{name: "backslash ended label", markdown: "[foo\\\nbar]: /target\n22. item\n    ```text\n    missing\n", violation: true},
 		{name: "balanced destination", markdown: "[ref]: /balanced(one)/escaped\\(two\\)\n22. item\n    ```text\n    missing\n", violation: true},
 		{name: "setext closes paragraph", markdown: "Heading\n===\n22. item\n    ```text\n    missing\n", violation: true},
+		{name: "lazy setext closes list paragraph", markdown: "- paragraph\n===\n  22. nested item\n      ```text\n      missing\n", violation: true},
 		{name: "html then fence", markdown: "<!--\n``` ignored\n-->\n```text\nmissing\n", violation: true},
 		{name: "type seven cannot interrupt", markdown: "paragraph\n<custom-element>\n```text\nmissing\n", violation: true},
 		{name: "embedded block tag", markdown: "paragraph before <div>\n```text\nmissing\n", violation: true},
