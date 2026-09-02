@@ -138,6 +138,11 @@ func shellLiteralWords(command string) []string {
 			continue
 		}
 		if quote != '\'' && character == '\\' {
+			if quote == '"' && index+1 < len(command) && !shellDoubleQuoteEscape(command[index+1]) {
+				word.WriteByte('\\')
+				started = true
+				continue
+			}
 			escaped = true
 			started = true
 			continue
@@ -168,6 +173,15 @@ func shellLiteralWords(command string) []string {
 	}
 	flush()
 	return words
+}
+
+func shellDoubleQuoteEscape(character byte) bool {
+	switch character {
+	case '$', '`', '"', '\\', '\n':
+		return true
+	default:
+		return false
+	}
 }
 
 func htpasswdCommandWords(words []string) ([]string, bool) {
