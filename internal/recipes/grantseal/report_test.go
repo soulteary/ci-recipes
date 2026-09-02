@@ -95,7 +95,7 @@ func TestInjectReportEnvironmentAtomicWriteFailureLeavesInput(t *testing.T) {
 		t.Fatal(err)
 	}
 	deps := fixedReportDeps(dir)
-	deps.writeAtomic = func(string, []byte) error { return errors.New("disk full") }
+	deps.writeAtomic = func(context.Context, string, []byte) error { return errors.New("disk full") }
 	_, _, err := executeTest(t, deps, "report", "inject-environment", "report.json")
 	requireExitCode(t, err, 2)
 	got, readErr := os.ReadFile(name)
@@ -104,6 +104,75 @@ func TestInjectReportEnvironmentAtomicWriteFailureLeavesInput(t *testing.T) {
 	}
 	if !bytes.Equal(got, original) {
 		t.Fatalf("input changed after failed write: %q", got)
+	}
+}
+
+func TestInjectReportEnvironmentCancellationPreservesInput(t *testing.T) {
+	dir := t.TempDir()
+	name := filepath.Join(dir, "report.json")
+	original := []byte(`{"schema_version":"1"}`)
+	if err := os.WriteFile(name, original, 0o640); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	deps := testDeps(dir)
+	deps.getenv = func(string) string { return "" }
+	runs := 0
+	deps.runner = fakeRunner{run: func(context.Context, command) error {
+		runs++
+		cancel()
+		return context.Canceled
+	}}
+	writes := 0
+	deps.writeAtomic = func(context.Context, string, []byte) error {
+		writes++
+		return nil
+	}
+	var stdout, stderr bytes.Buffer
+	err := execute(ctx, deps, []string{"report", "inject-environment", "report.json"}, nil, &stdout, &stderr)
+	requireExitCode(t, err, 2)
+	if !strings.Contains(err.Error(), context.Canceled.Error()) {
+		t.Fatalf("error = %v, want cancellation", err)
+	}
+	if runs != 1 || writes != 0 {
+		t.Fatalf("commands=%d writes=%d, want one interrupted command and no write", runs, writes)
+	}
+	got, readErr := os.ReadFile(name)
+	if readErr != nil {
+		t.Fatal(readErr)
+	}
+	if !bytes.Equal(got, original) {
+		t.Fatalf("input changed after cancellation: %q", got)
+	}
+}
+
+func TestInjectReportEnvironmentCancellationDuringAtomicWritePreservesInput(t *testing.T) {
+	dir := t.TempDir()
+	name := filepath.Join(dir, "report.json")
+	original := []byte(`{"schema_version":"1"}`)
+	if err := os.WriteFile(name, original, 0o640); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	deps := fixedReportDeps(dir)
+	deps.writeAtomic = func(writeCtx context.Context, name string, data []byte) error {
+		cancel()
+		return atomicWriteFile(writeCtx, name, data)
+	}
+	var stdout, stderr bytes.Buffer
+	err := execute(ctx, deps, []string{"report", "inject-environment", "report.json"}, nil, &stdout, &stderr)
+	requireExitCode(t, err, 2)
+	if !strings.Contains(err.Error(), context.Canceled.Error()) {
+		t.Fatalf("error = %v, want cancellation", err)
+	}
+	got, readErr := os.ReadFile(name)
+	if readErr != nil {
+		t.Fatal(readErr)
+	}
+	if !bytes.Equal(got, original) {
+		t.Fatalf("input changed after cancellation: %q", got)
 	}
 }
 
@@ -126,7 +195,10 @@ func TestDeriveReportEnvironmentFallbacks(t *testing.T) {
 		}
 		return nil
 	}}
-	got := deriveReportEnvironment(context.Background(), deps)
+	got, err := deriveReportEnvironment(context.Background(), deps)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if got.Commit != "abc123" || got.GeneratedAt != "2026-01-02T02:04:05Z" || got.GoVersion != "go1.22.8" || got.OS != "linux" || got.Arch != "arm64" {
 		t.Fatalf("environment=%+v", got)
 	}
@@ -353,12 +425,12 @@ func TestGenerateQualityDocsRollsBackFirstCommitWhenSecondFails(t *testing.T) {
 	deps := testDeps(dir)
 	realWriteAtomic := deps.writeAtomic
 	writes := 0
-	deps.writeAtomic = func(name string, data []byte) error {
+	deps.writeAtomic = func(ctx context.Context, name string, data []byte) error {
 		writes++
 		if writes == 2 {
 			return errors.New("second commit failed")
 		}
-		return realWriteAtomic(name, data)
+		return realWriteAtomic(ctx, name, data)
 	}
 	stdout, _, err := executeTest(t, deps, "quality", "docs")
 	requireExitCode(t, err, 2)
@@ -396,7 +468,7 @@ func TestAtomicWritePreservesMode(t *testing.T) {
 	if err := os.WriteFile(name, []byte("old"), 0o640); err != nil {
 		t.Fatal(err)
 	}
-	if err := atomicWriteFile(name, []byte("new")); err != nil {
+	if err := atomicWriteFile(context.Background(), name, []byte("new")); err != nil {
 		t.Fatal(err)
 	}
 	info, err := os.Stat(name)
@@ -416,7 +488,7 @@ func TestAtomicWriteRejectsSymlink(t *testing.T) {
 	if err := os.Symlink(target, link); err != nil {
 		t.Skipf("symlinks unavailable: %v", err)
 	}
-	if err := atomicWriteFile(link, []byte("new")); err == nil {
+	if err := atomicWriteFile(context.Background(), link, []byte("new")); err == nil {
 		t.Fatal("symlink target accepted")
 	}
 	data, _ := os.ReadFile(target)
