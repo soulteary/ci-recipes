@@ -22,3 +22,5 @@ All notable changes to this project will be documented in this file.
 - Detect Stargate documentation examples that enable `htpasswd` batch-password
   mode after earlier options, root prompts, or common command wrappers without
   crossing shell command or comment boundaries.
+- Stop Grantseal report injection on context cancellation before replacing the
+  existing report with fallback metadata.
