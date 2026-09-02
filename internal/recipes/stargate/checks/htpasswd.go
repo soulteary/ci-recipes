@@ -35,6 +35,7 @@ func shellCommandFragments(text string) []string {
 	lineStart := 0
 	quote := byte(0)
 	quoteMultiline := false
+	quoteCommand := false
 	escaped := false
 	flush := func(end int) {
 		if fragment := strings.TrimSpace(text[start:end]); fragment != "" {
@@ -48,11 +49,12 @@ func shellCommandFragments(text string) []string {
 			if character == '\n' || character == '\r' {
 				lineStart = index + 1
 				if quote != 0 && !quoteMultiline &&
-					(character == '\r' || !quotedWordContinuationCloses(text, index+1, quote)) {
+					(!quoteCommand || character == '\r' || !quotedWordContinuationCloses(text, index+1, quote)) {
 					flush(index)
 					start = index + 1
 					quote = 0
 					quoteMultiline = false
+					quoteCommand = false
 				}
 			}
 			continue
@@ -66,6 +68,7 @@ func shellCommandFragments(text string) []string {
 			start = index + 1
 			quote = 0
 			quoteMultiline = false
+			quoteCommand = false
 			continue
 		}
 		if quote != '\'' && character == '\\' {
@@ -76,12 +79,15 @@ func shellCommandFragments(text string) []string {
 			if character == quote {
 				quote = 0
 				quoteMultiline = false
+				quoteCommand = false
 			}
 			continue
 		}
 		if character == '\'' || character == '"' {
 			quote = character
-			quoteMultiline = envSplitOperandAtQuote(text[start:index])
+			prefix := text[start:index]
+			quoteMultiline = envSplitOperandAtQuote(prefix)
+			quoteCommand = quoteStartsInHTPasswdCommand(prefix)
 			continue
 		}
 		if character == '#' && shellCommentStart(text, index) && !markdownRootPrompt(text, lineStart, index) {
@@ -97,6 +103,7 @@ func shellCommandFragments(text string) []string {
 			}
 			quote = 0
 			quoteMultiline = false
+			quoteCommand = false
 			escaped = false
 			continue
 		}
@@ -108,6 +115,14 @@ func shellCommandFragments(text string) []string {
 	}
 	flush(len(text))
 	return fragments
+}
+
+// quoteStartsInHTPasswdCommand reports whether the current quote starts
+// after a statically recognized htpasswd command word. Only those quotes may
+// carry an ordinary shell continuation across a documentation line boundary.
+func quoteStartsInHTPasswdCommand(prefix string) bool {
+	_, ok := htpasswdCommandWords(shellLiteralWords(prefix))
+	return ok
 }
 
 // quotedWordContinuationCloses reports whether the physical line following an
