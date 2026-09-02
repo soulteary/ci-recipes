@@ -22,3 +22,5 @@ All notable changes to this project will be documented in this file.
 - Detect Stargate documentation examples that enable `htpasswd` batch-password
   mode after earlier options, root prompts, or common command wrappers without
   crossing shell command or comment boundaries.
+- Reject symlinked Grantseal release-archive candidates instead of silently
+  treating the archive directory as empty.
