@@ -472,8 +472,14 @@ lineLoop:
 			offset, matched := continueContainers(line, containers)
 			if matched < len(containers) {
 				remaining := line[offset:]
-				if paragraphActive && paragraphDepth == len(containers) && !interruptsParagraph(remaining) {
-					continue lineLoop
+				if paragraphActive && paragraphDepth == len(containers) {
+					if setextUnderline(remaining) {
+						paragraphActive = false
+						continue lineLoop
+					}
+					if !interruptsParagraph(remaining) {
+						continue lineLoop
+					}
 				}
 				containers = containers[:matched]
 				if paragraphDepth > matched {
