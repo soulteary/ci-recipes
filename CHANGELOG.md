@@ -14,3 +14,8 @@ All notable changes to this project will be documented in this file.
 - Document audited source snapshots and inactive-script exclusions.
 - Reject non-canonical or hidden archive payloads, unsafe cross-platform paths,
   unverified registry manifest bodies, and release-asset symlinks.
+
+### Fixed
+
+- Accept Git's canonical global PAX commit header when creating isolated
+  Stargate snapshots while continuing to reject arbitrary PAX metadata.

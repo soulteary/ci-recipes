@@ -239,6 +239,8 @@ func archiveRevision(ctx context.Context, runner commandRunner, root, revision s
 	}()
 
 	reader := tar.NewReader(bytes.NewReader(archive.Bytes()))
+	sawGlobalHeader := false
+	sawFilesystemEntry := false
 	for {
 		if err := ctx.Err(); err != nil {
 			return "", err
@@ -256,11 +258,19 @@ func archiveRevision(ctx context.Context, runner commandRunner, root, revision s
 		}
 		path := filepath.Join(destination, clean)
 		switch header.Typeflag {
+		case tar.TypeXGlobalHeader:
+			if sawGlobalHeader || sawFilesystemEntry || !validGitGlobalHeader(header) {
+				return "", fmt.Errorf("git archive contains unsupported global PAX header %q", header.Name)
+			}
+			sawGlobalHeader = true
+			continue
 		case tar.TypeDir:
+			sawFilesystemEntry = true
 			if err := os.MkdirAll(path, 0o755); err != nil {
 				return "", fmt.Errorf("create archive directory %q: %w", clean, err)
 			}
 		case tar.TypeReg, tar.TypeRegA:
+			sawFilesystemEntry = true
 			if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 				return "", fmt.Errorf("create archive parent for %q: %w", clean, err)
 			}
@@ -282,4 +292,22 @@ func archiveRevision(ctx context.Context, runner commandRunner, root, revision s
 	}
 	ok = true
 	return destination, nil
+}
+
+func validGitGlobalHeader(header *tar.Header) bool {
+	if header.Name != "pax_global_header" || len(header.PAXRecords) != 1 {
+		return false
+	}
+	commit, ok := header.PAXRecords["comment"]
+	if !ok || len(commit) != 40 && len(commit) != 64 {
+		return false
+	}
+	for _, character := range commit {
+		if character < '0' || character > '9' {
+			if character < 'a' || character > 'f' {
+				return false
+			}
+		}
+	}
+	return true
 }

@@ -1,6 +1,7 @@
 package checks
 
 import (
+	"archive/tar"
 	"bytes"
 	"context"
 	"io"
@@ -9,6 +10,76 @@ import (
 	"strings"
 	"testing"
 )
+
+func TestArchiveRevisionAcceptsCanonicalGitGlobalHeader(t *testing.T) {
+	t.Parallel()
+	archive := gitArchiveFixture(t, &tar.Header{
+		Name:       "pax_global_header",
+		Typeflag:   tar.TypeXGlobalHeader,
+		PAXRecords: map[string]string{"comment": strings.Repeat("a", 40)},
+	})
+	runner := &fakeCommandRunner{run: func(command Command) error {
+		_, err := command.Stdout.Write(archive)
+		return err
+	}}
+	destination, err := archiveRevision(context.Background(), runner, t.TempDir(), "HEAD", nil, io.Discard)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(destination)
+	contents, err := os.ReadFile(filepath.Join(destination, "README.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(contents) != "fixture\n" {
+		t.Fatalf("contents=%q", contents)
+	}
+}
+
+func TestArchiveRevisionRejectsNonCanonicalGlobalHeaders(t *testing.T) {
+	t.Parallel()
+	for _, test := range []struct {
+		name   string
+		header *tar.Header
+	}{
+		{name: "wrong name", header: &tar.Header{Name: "global", Typeflag: tar.TypeXGlobalHeader, PAXRecords: map[string]string{"comment": strings.Repeat("a", 40)}}},
+		{name: "invalid commit", header: &tar.Header{Name: "pax_global_header", Typeflag: tar.TypeXGlobalHeader, PAXRecords: map[string]string{"comment": "HEAD"}}},
+		{name: "extra record", header: &tar.Header{Name: "pax_global_header", Typeflag: tar.TypeXGlobalHeader, PAXRecords: map[string]string{"comment": strings.Repeat("a", 40), "path": "README.md"}}},
+	} {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			archive := gitArchiveFixture(t, test.header)
+			runner := &fakeCommandRunner{run: func(command Command) error {
+				_, err := command.Stdout.Write(archive)
+				return err
+			}}
+			if _, err := archiveRevision(context.Background(), runner, t.TempDir(), "HEAD", nil, io.Discard); err == nil {
+				t.Fatal("non-canonical global header accepted")
+			}
+		})
+	}
+}
+
+func gitArchiveFixture(t *testing.T, global *tar.Header) []byte {
+	t.Helper()
+	var archive bytes.Buffer
+	writer := tar.NewWriter(&archive)
+	if err := writer.WriteHeader(global); err != nil {
+		t.Fatal(err)
+	}
+	contents := []byte("fixture\n")
+	if err := writer.WriteHeader(&tar.Header{Name: "README.md", Mode: 0o644, Size: int64(len(contents)), Typeflag: tar.TypeReg}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := writer.Write(contents); err != nil {
+		t.Fatal(err)
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatal(err)
+	}
+	return archive.Bytes()
+}
 
 func TestGoVersionContractUsesIsolatedArchive(t *testing.T) {
 	t.Parallel()
