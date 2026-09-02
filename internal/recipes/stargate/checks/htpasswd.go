@@ -34,6 +34,7 @@ func shellCommandFragments(text string) []string {
 	start := 0
 	lineStart := 0
 	quote := byte(0)
+	quoteMultiline := false
 	escaped := false
 	flush := func(end int) {
 		if fragment := strings.TrimSpace(text[start:end]); fragment != "" {
@@ -51,11 +52,13 @@ func shellCommandFragments(text string) []string {
 		}
 		if character == '\n' || character == '\r' {
 			lineStart = index + 1
-			if quote != 0 {
+			if quote != 0 && quoteMultiline {
 				continue
 			}
 			flush(index)
 			start = index + 1
+			quote = 0
+			quoteMultiline = false
 			continue
 		}
 		if quote != '\'' && character == '\\' {
@@ -65,11 +68,13 @@ func shellCommandFragments(text string) []string {
 		if quote != 0 {
 			if character == quote {
 				quote = 0
+				quoteMultiline = false
 			}
 			continue
 		}
 		if character == '\'' || character == '"' {
 			quote = character
+			quoteMultiline = envSplitOperandAtQuote(text[start:index])
 			continue
 		}
 		if character == '#' && shellCommentStart(text, index) && !markdownRootPrompt(text, lineStart, index) {
@@ -84,6 +89,7 @@ func shellCommandFragments(text string) []string {
 				start = len(text)
 			}
 			quote = 0
+			quoteMultiline = false
 			escaped = false
 			continue
 		}
@@ -95,6 +101,79 @@ func shellCommandFragments(text string) []string {
 	}
 	flush(len(text))
 	return fragments
+}
+
+// envSplitOperandAtQuote reports whether a quote which starts immediately
+// after prefix belongs to GNU env's -S/--split-string operand. Literal
+// newlines in that operand are argv separators and must remain in the same
+// fragment. Other unmatched Markdown prose quotes recover at the line
+// boundary instead of swallowing commands on following lines.
+func envSplitOperandAtQuote(prefix string) bool {
+	words := shellLiteralWords(prefix)
+	index := 0
+	for index < len(words) && markdownCommandPrefix(words[index]) {
+		index++
+	}
+	for index < len(words) && shellAssignmentWord(words[index]) {
+		index++
+	}
+	for wrapperDepth := 0; index < len(words) && wrapperDepth < 64; wrapperDepth++ {
+		switch filepath.Base(words[index]) {
+		case "sudo":
+			var executable bool
+			index, executable = skipSudoOptions(words, index+1)
+			if !executable {
+				return false
+			}
+		case "command":
+			var executable bool
+			index, executable = skipCommandOptions(words, index+1)
+			if !executable {
+				return false
+			}
+		case "ionice":
+			var executable bool
+			index, executable = skipIoniceOptions(words, index+1)
+			if !executable {
+				return false
+			}
+		case "env":
+			return quoteStartsEnvSplitOperand(words[index+1:], strings.HasSuffix(prefix, " ") || strings.HasSuffix(prefix, "\t"))
+		default:
+			return false
+		}
+	}
+	return false
+}
+
+func quoteStartsEnvSplitOperand(arguments []string, afterSpace bool) bool {
+	for index := 0; index < len(arguments); {
+		word := arguments[index]
+		if word == "--" || word == "-" || !strings.HasPrefix(word, "-") {
+			return false
+		}
+		option, _, attached, ok := parseEnvOption(word)
+		if !ok || option.nonExecuting {
+			return false
+		}
+		if option.split {
+			if attached {
+				return index == len(arguments)-1 && !afterSpace
+			}
+			if index+1 >= len(arguments) {
+				return true
+			}
+			return index+1 == len(arguments)-1 && !afterSpace
+		}
+		index++
+		if option.operand && !attached {
+			if index >= len(arguments) {
+				return false
+			}
+			index++
+		}
+	}
+	return false
 }
 
 func shellCommentStart(text string, index int) bool {
