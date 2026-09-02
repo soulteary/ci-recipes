@@ -1,6 +1,9 @@
 package checks
 
-import "testing"
+import (
+	"reflect"
+	"testing"
+)
 
 func TestUnsafeHTPasswdBatchInvocations(t *testing.T) {
 	t.Parallel()
@@ -24,6 +27,8 @@ func TestUnsafeHTPasswdBatchInvocations(t *testing.T) {
 		{name: "sudo reset timestamp and command", text: `sudo -k htpasswd -C 10 -bn "" password`, want: 1},
 		{name: "sudo no-update and command", text: `sudo -N htpasswd -C 10 -bn "" password`, want: 1},
 		{name: "sudo optional long operand", text: `sudo --preserve-env=HOME htpasswd -C 10 -bn "" password`, want: 1},
+		{name: "sudo non-shell assignment name", text: `sudo FOO-BAR=value htpasswd -C 10 -bn "" password`, want: 1},
+		{name: "sudo digit assignment name", text: `sudo 1FOO=value htpasswd -C 10 -bn "" password`, want: 1},
 		{name: "env wrapper", text: `env PASSWORD=value htpasswd -C 10 -bn "" password`, want: 1},
 		{name: "env wrapper option", text: `env -u PASSWORD htpasswd -C 10 -bn "" password`, want: 1},
 		{name: "env lone dash", text: `env - htpasswd -C 10 -bn "" password`, want: 1},
@@ -31,6 +36,7 @@ func TestUnsafeHTPasswdBatchInvocations(t *testing.T) {
 		{name: "env attached split string", text: `env -S'htpasswd -C 10 -bn "" password'`, want: 1},
 		{name: "env long split string", text: `env --split-string='htpasswd -C 10 -bn "" password'`, want: 1},
 		{name: "env abbreviated split string", text: `env --split='htpasswd -C 10 -bn "" password'`, want: 1},
+		{name: "env split escape separators", text: `env -S 'htpasswd\_-bn\_""\_password'`, want: 1},
 		{name: "env split options", text: `env -S '-i PASSWORD=value htpasswd -C 10 -bn "" password'`, want: 1},
 		{name: "env split nested wrapper", text: `env -S 'sudo htpasswd -C 10 -bn "" password'`, want: 1},
 		{name: "env empty split string", text: `env -S '' htpasswd -C 10 -bn "" password`, want: 1},
@@ -67,7 +73,14 @@ func TestUnsafeHTPasswdBatchInvocations(t *testing.T) {
 		{name: "sudo list-mode other user", text: `sudo -U root htpasswd -bn`},
 		{name: "sudo long help", text: `sudo --help htpasswd -bn`},
 		{name: "sudo ambiguous long option", text: `sudo --preserve htpasswd -bn`},
+		{name: "sudo assignment ends options", text: `sudo FOO=value -u root htpasswd -bn`},
 		{name: "env split invokes another command", text: `env -S 'printf htpasswd -bn'`},
+		{name: "env split double-quoted separator", text: `env -S '"htpasswd\_-bn" password'`},
+		{name: "env split single-quoted escape", text: `env -S "'htpasswd\\_-bn' password"`},
+		{name: "env split comment", text: `env -S 'printf ok # htpasswd\_-bn'`},
+		{name: "env split cancel", text: `env -S 'printf ok\c htpasswd\_-bn'`},
+		{name: "env split invalid escape", text: `env -S 'printf\q htpasswd -bn'`},
+		{name: "env split unterminated quote", text: `env -S '"printf htpasswd -bn'`},
 		{name: "env null mode", text: `env -0 htpasswd -bn`},
 		{name: "env long null mode", text: `env --null htpasswd -bn`},
 		{name: "env help", text: `env --help htpasswd -bn`},
@@ -96,6 +109,41 @@ func TestUnsafeHTPasswdBatchInvocations(t *testing.T) {
 			t.Parallel()
 			if got := len(unsafeHTPasswdBatchInvocations(test.text)); got != test.want {
 				t.Fatalf("violations=%d, want %d", got, test.want)
+			}
+		})
+	}
+}
+
+func TestEnvSplitWords(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name  string
+		value string
+		want  []string
+		valid bool
+	}{
+		{name: "whitespace", value: `htpasswd -bn "" password`, want: []string{"htpasswd", "-bn", "", "password"}, valid: true},
+		{name: "escape separators", value: `htpasswd\_-bn\_""\_password`, want: []string{"htpasswd", "-bn", "", "password"}, valid: true},
+		{name: "double quoted separator", value: `"htpasswd\_-bn" password`, want: []string{"htpasswd -bn", "password"}, valid: true},
+		{name: "single quoted escape", value: `'htpasswd\_-bn' password`, want: []string{`htpasswd\_-bn`, "password"}, valid: true},
+		{name: "comment", value: `printf ok # ignored`, want: []string{"printf", "ok"}, valid: true},
+		{name: "embedded hash", value: `printf A# B`, want: []string{"printf", "A#", "B"}, valid: true},
+		{name: "escaped hash", value: `printf \#B`, want: []string{"printf", "#B"}, valid: true},
+		{name: "cancel", value: `printf A\c ignored`, want: []string{"printf", "A"}, valid: true},
+		{name: "escaped control", value: `printf X\nY`, want: []string{"printf", "X\nY"}, valid: true},
+		{name: "empty argument", value: `""`, want: []string{""}, valid: true},
+		{name: "unknown escape", value: `printf\q`},
+		{name: "cancel in double quotes", value: `"printf\c"`},
+		{name: "unterminated quote", value: `"printf`},
+		{name: "trailing escape", value: `printf\`},
+	}
+	for _, test := range tests {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			got, valid := envSplitWords(test.value)
+			if valid != test.valid || !reflect.DeepEqual(got, test.want) {
+				t.Fatalf("envSplitWords(%q) = %#v, %t; want %#v, %t", test.value, got, valid, test.want, test.valid)
 			}
 		})
 	}
