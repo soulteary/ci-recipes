@@ -71,7 +71,7 @@ func TestUnsafeHTPasswdBatchInvocations(t *testing.T) {
 		{name: "next line after comment", text: "echo ok # comment\nhtpasswd -C 10 -bn \"\" password", want: 1},
 		{name: "next line after prose contraction", text: "don't document this\nhtpasswd -C 10 -bn \"\" password", want: 1},
 		{name: "next line after unmatched prose quote", text: "prose says \"never do this\nhtpasswd -C 10 -bn \"\" password", want: 1},
-		{name: "next line after escaped unmatched prose quote", text: "prose says \"never do this\\\\\nhtpasswd -C 10 -bn \"\" password", want: 1},
+		{name: "next line after escaped unmatched prose quote", text: "prose says \"never do this\\\nhtpasswd -C 10 -bn \"\" password", want: 1},
 		{name: "next line after completed env split", text: "env -S 'printf ok' \"unmatched\nhtpasswd -C 10 -bn \"\" password", want: 1},
 		{name: "wrapper invokes another command", text: `sudo printf '%s\\n' htpasswd -bn`},
 		{name: "sudo list", text: `sudo -l htpasswd -bn`},
