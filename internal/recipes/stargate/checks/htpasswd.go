@@ -138,7 +138,17 @@ func envSplitOperandAtQuote(prefix string) bool {
 				return false
 			}
 		case "env":
-			return quoteStartsEnvSplitOperand(words[index+1:], strings.HasSuffix(prefix, " ") || strings.HasSuffix(prefix, "\t"))
+			arguments := words[index+1:]
+			afterSpace := strings.HasSuffix(prefix, " ") || strings.HasSuffix(prefix, "\t")
+			if quoteStartsEnvSplitOperand(arguments, afterSpace) {
+				return true
+			}
+			var executable bool
+			words, executable = unwrapEnvWords(arguments)
+			if !executable {
+				return false
+			}
+			index = 0
 		default:
 			return false
 		}
