@@ -510,7 +510,6 @@ func checkForbiddenDocumentation(ctx context.Context, root string, add func(stri
 		{"container health check omits port 8080", regexp.MustCompile(`http://localhost/healthz`)},
 		{"metrics incorrectly described as new in v1", regexp.MustCompile(`(?:No metrics endpoint|无指标端点|Added Prometheus metrics)`)},
 		{"stale Go 1.26 requirement", regexp.MustCompile(`(?i)\bGo(?:\s+(?:Version|版本))?\s*[:：]?\s*1\.26(?:\.\d+)?\+?\b`)},
-		{"unsafe htpasswd batch-password option", regexp.MustCompile(`\bhtpasswd\s+-[A-Za-z]*b[A-Za-z]*\b`)},
 	}
 	retiredPattern := regexp.MustCompile(`\bWARDEN_OTP_(?:ENABLED|SECRET_KEY)\b`)
 	authRefreshPattern := regexp.MustCompile(`(?s)#### ` + "`AUTH_REFRESH_ENABLED`" + `.*?\|\s*\*\*(?:Default|默认值)\*\*\s*\|\s*` + "`false`")
@@ -534,6 +533,9 @@ func checkForbiddenDocumentation(ctx context.Context, root string, add func(stri
 			for range entry.pattern.FindAllStringIndex(text, -1) {
 				add("%s in %s", entry.label, path)
 			}
+		}
+		for range unsafeHTPasswdBatchInvocations(text) {
+			add("unsafe htpasswd batch-password option in %s", path)
 		}
 		if strings.HasSuffix(filepath.ToSlash(path), "/ARCHITECTURE.md") {
 			for _, line := range strings.Split(text, "\n") {

@@ -282,7 +282,7 @@ func TestRepositoryContractMutations(t *testing.T) {
 	}{
 		{name: "compatibility route is exact", path: "docs/enUS/API.md", old: "`GET /health`", replacement: "`GET /healthz`", want: "compatibility route"},
 		{name: "runtime route needs heading", path: "docs/enUS/API.md", old: "### `GET /example`", replacement: "The `GET /example` route is available.", want: "Missing route heading"},
-		{name: "unsafe htpasswd argument", path: "docs/enUS/CONFIG.md", appendText: "\nhtpasswd -bnBC 10 \"\" password\n", want: "unsafe htpasswd"},
+		{name: "unsafe reordered htpasswd argument", path: "docs/enUS/CONFIG.md", appendText: "\nhtpasswd -C 10 -bn \"\" password\n", want: "unsafe htpasswd"},
 		{name: "container port migration", path: "CHANGELOG.md", old: "- The official container now listens on `8080` rather than `80`.\n", replacement: "", want: "container port"},
 		{name: "v1 heading must start a line", path: "CHANGELOG.md", old: "## [1.0.0]", replacement: "prefix ## [1.0.0]", want: "Breaking changes section"},
 		{name: "breaking heading must be exact", path: "CHANGELOG.md", old: "### Breaking changes", replacement: "### Breaking changes obsolete", want: "Breaking changes section"},
