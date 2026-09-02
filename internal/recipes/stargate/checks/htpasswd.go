@@ -271,7 +271,7 @@ var sudoOptions = []wrapperOption{
 	{short: 's', long: "shell"},
 	{short: 't', long: "type", operand: true},
 	{short: 'T', long: "command-timeout", operand: true},
-	{short: 'U', long: "other-user", operand: true},
+	{short: 'U', long: "other-user", operand: true, nonExecuting: true},
 	{short: 'u', long: "user", operand: true},
 	{short: 'V', long: "version", nonExecuting: true},
 	{short: 'v', long: "validate", nonExecuting: true},
