@@ -37,6 +37,7 @@ func TestUnsafeHTPasswdBatchInvocations(t *testing.T) {
 		{name: "env long split string", text: `env --split-string='htpasswd -C 10 -bn "" password'`, want: 1},
 		{name: "env abbreviated split string", text: `env --split='htpasswd -C 10 -bn "" password'`, want: 1},
 		{name: "env split escape separators", text: `env -S 'htpasswd\_-bn\_""\_password'`, want: 1},
+		{name: "env shell-double-quoted split separators", text: `env -S "htpasswd\_-bn\_password"`, want: 1},
 		{name: "env split options", text: `env -S '-i PASSWORD=value htpasswd -C 10 -bn "" password'`, want: 1},
 		{name: "env split nested wrapper", text: `env -S 'sudo htpasswd -C 10 -bn "" password'`, want: 1},
 		{name: "env empty split string", text: `env -S '' htpasswd -C 10 -bn "" password`, want: 1},
@@ -102,6 +103,7 @@ func TestUnsafeHTPasswdBatchInvocations(t *testing.T) {
 		{name: "prose", text: `Do not invoke htpasswd with -b because it exposes the password.`},
 		{name: "long option", text: `htpasswd --batch stargate`},
 		{name: "after double dash", text: `htpasswd -- -bn`},
+		{name: "escaped option in double quotes", text: `htpasswd "\-bn" password`},
 	}
 	for _, test := range tests {
 		test := test
