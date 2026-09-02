@@ -1,0 +1,65 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Test (${{ matrix.os }}, Go ${{ matrix.go }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            go: 1.22.x
+          - os: ubuntu-latest
+            go: 1.27.x
+          - os: macos-latest
+            go: 1.27.x
+          - os: windows-latest
+            go: 1.27.x
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version: ${{ matrix.go }}
+          cache: false
+      - name: Test
+        run: go test -count=1 ./...
+      - name: Build
+        run: go build -trimpath ./cmd/ci-recipes
+
+  quality:
+    name: Race, format, and vet
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version: 1.27.x
+          cache: false
+      - name: Format
+        run: gofmt -w .
+      - name: Verify formatting
+        run: git diff --exit-code
+      - name: Test with race detector
+        run: go test -race -count=1 ./...
+      - name: Vet
+        run: go vet ./...
