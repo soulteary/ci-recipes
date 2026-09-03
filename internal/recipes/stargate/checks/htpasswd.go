@@ -47,11 +47,11 @@ func shellCommandFragments(text string) []string {
 		if escaped {
 			escaped = false
 			if character == '\n' || character == '\r' {
-				lineStart = index + 1
 				if quote != 0 && !quoteMultiline &&
 					(!quoteCommand || character == '\r' || !quotedWordContinuationCloses(text, index+1, quote)) {
 					flush(index)
 					start = index + 1
+					lineStart = index + 1
 					quote = 0
 					quoteMultiline = false
 					quoteCommand = false
