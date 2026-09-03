@@ -11,7 +11,7 @@ import (
 // examples; it does not try to evaluate shell expansions.
 func unsafeHTPasswdBatchInvocations(text string) []struct{} {
 	violations := make([]struct{}, 0)
-	for _, command := range shellCommandFragments(strings.ReplaceAll(text, "\\\n", " ")) {
+	for _, command := range shellCommandFragments(text) {
 		commandWords, ok := htpasswdCommandWords(shellLiteralWords(command))
 		if !ok {
 			continue
@@ -34,6 +34,8 @@ func shellCommandFragments(text string) []string {
 	start := 0
 	lineStart := 0
 	quote := byte(0)
+	quoteMultiline := false
+	quoteCommand := false
 	escaped := false
 	flush := func(end int) {
 		if fragment := strings.TrimSpace(text[start:end]); fragment != "" {
@@ -42,16 +44,31 @@ func shellCommandFragments(text string) []string {
 	}
 	for index := 0; index < len(text); index++ {
 		character := text[index]
-		if character == '\n' || character == '\r' {
-			flush(index)
-			start = index + 1
-			lineStart = index + 1
-			quote = 0
-			escaped = false
-			continue
-		}
 		if escaped {
 			escaped = false
+			if character == '\n' || character == '\r' {
+				lineStart = index + 1
+				if quote != 0 && !quoteMultiline &&
+					(!quoteCommand || character == '\r' || !quotedWordContinuationCloses(text, index+1, quote)) {
+					flush(index)
+					start = index + 1
+					quote = 0
+					quoteMultiline = false
+					quoteCommand = false
+				}
+			}
+			continue
+		}
+		if character == '\n' || character == '\r' {
+			lineStart = index + 1
+			if quote != 0 && quoteMultiline {
+				continue
+			}
+			flush(index)
+			start = index + 1
+			quote = 0
+			quoteMultiline = false
+			quoteCommand = false
 			continue
 		}
 		if quote != '\'' && character == '\\' {
@@ -61,11 +78,16 @@ func shellCommandFragments(text string) []string {
 		if quote != 0 {
 			if character == quote {
 				quote = 0
+				quoteMultiline = false
+				quoteCommand = false
 			}
 			continue
 		}
 		if character == '\'' || character == '"' {
 			quote = character
+			prefix := text[start:index]
+			quoteMultiline = envSplitOperandAtQuote(prefix)
+			quoteCommand = quoteStartsInHTPasswdCommand(prefix)
 			continue
 		}
 		if character == '#' && shellCommentStart(text, index) && !markdownRootPrompt(text, lineStart, index) {
@@ -80,6 +102,8 @@ func shellCommandFragments(text string) []string {
 				start = len(text)
 			}
 			quote = 0
+			quoteMultiline = false
+			quoteCommand = false
 			escaped = false
 			continue
 		}
@@ -91,6 +115,123 @@ func shellCommandFragments(text string) []string {
 	}
 	flush(len(text))
 	return fragments
+}
+
+// quoteStartsInHTPasswdCommand reports whether the current quote starts
+// after a statically recognized htpasswd command word. Only those quotes may
+// carry an ordinary shell continuation across a documentation line boundary.
+func quoteStartsInHTPasswdCommand(prefix string) bool {
+	_, ok := htpasswdCommandWords(shellLiteralWords(prefix))
+	return ok
+}
+
+// quotedWordContinuationCloses reports whether the physical line following an
+// escaped newline closes the current quoted word before any whitespace. This
+// preserves real shell continuations such as "-\\\nbn" without allowing an
+// unmatched prose quote to consume a later command line.
+func quotedWordContinuationCloses(text string, start int, quote byte) bool {
+	escaped := false
+	for index := start; index < len(text); index++ {
+		character := text[index]
+		if escaped {
+			escaped = false
+			continue
+		}
+		if quote != '\'' && character == '\\' {
+			escaped = true
+			continue
+		}
+		if character == quote {
+			return true
+		}
+		if character == ' ' || character == '\t' || character == '\n' || character == '\r' {
+			return false
+		}
+	}
+	return false
+}
+
+// envSplitOperandAtQuote reports whether a quote which starts immediately
+// after prefix belongs to GNU env's -S/--split-string operand. Literal
+// newlines in that operand are argv separators and must remain in the same
+// fragment. Other unmatched Markdown prose quotes recover at the line
+// boundary instead of swallowing commands on following lines.
+func envSplitOperandAtQuote(prefix string) bool {
+	words := shellLiteralWords(prefix)
+	index := 0
+	for index < len(words) && markdownCommandPrefix(words[index]) {
+		index++
+	}
+	for index < len(words) && shellAssignmentWord(words[index]) {
+		index++
+	}
+	for wrapperDepth := 0; index < len(words) && wrapperDepth < 64; wrapperDepth++ {
+		switch filepath.Base(words[index]) {
+		case "sudo":
+			var executable bool
+			index, executable = skipSudoOptions(words, index+1)
+			if !executable {
+				return false
+			}
+		case "command":
+			var executable bool
+			index, executable = skipCommandOptions(words, index+1)
+			if !executable {
+				return false
+			}
+		case "ionice":
+			var executable bool
+			index, executable = skipIoniceOptions(words, index+1)
+			if !executable {
+				return false
+			}
+		case "env":
+			arguments := words[index+1:]
+			afterSpace := strings.HasSuffix(prefix, " ") || strings.HasSuffix(prefix, "\t")
+			if quoteStartsEnvSplitOperand(arguments, afterSpace) {
+				return true
+			}
+			var executable bool
+			words, executable = unwrapEnvWords(arguments)
+			if !executable {
+				return false
+			}
+			index = 0
+		default:
+			return false
+		}
+	}
+	return false
+}
+
+func quoteStartsEnvSplitOperand(arguments []string, afterSpace bool) bool {
+	for index := 0; index < len(arguments); {
+		word := arguments[index]
+		if word == "--" || word == "-" || !strings.HasPrefix(word, "-") {
+			return false
+		}
+		option, _, attached, ok := parseEnvOption(word)
+		if !ok || option.nonExecuting {
+			return false
+		}
+		if option.split {
+			if attached {
+				return index == len(arguments)-1 && !afterSpace
+			}
+			if index+1 >= len(arguments) {
+				return true
+			}
+			return index+1 == len(arguments)-1 && !afterSpace
+		}
+		index++
+		if option.operand && !attached {
+			if index >= len(arguments) {
+				return false
+			}
+			index++
+		}
+	}
+	return false
 }
 
 func shellCommentStart(text string, index int) bool {
@@ -132,6 +273,10 @@ func shellLiteralWords(command string) []string {
 	for index := 0; index < len(command); index++ {
 		character := command[index]
 		if escaped {
+			if character == '\n' {
+				escaped = false
+				continue
+			}
 			word.WriteByte(character)
 			started = true
 			escaped = false
@@ -144,7 +289,6 @@ func shellLiteralWords(command string) []string {
 				continue
 			}
 			escaped = true
-			started = true
 			continue
 		}
 		if quote != 0 {
@@ -161,7 +305,7 @@ func shellLiteralWords(command string) []string {
 			started = true
 			continue
 		}
-		if character == ' ' || character == '\t' {
+		if character == ' ' || character == '\t' || character == '\n' || character == '\r' {
 			flush()
 			continue
 		}
@@ -170,6 +314,7 @@ func shellLiteralWords(command string) []string {
 	}
 	if escaped {
 		word.WriteByte('\\')
+		started = true
 	}
 	flush()
 	return words
@@ -189,13 +334,10 @@ func htpasswdCommandWords(words []string) ([]string, bool) {
 	for index < len(words) && markdownCommandPrefix(words[index]) {
 		index++
 	}
+	for index < len(words) && shellAssignmentWord(words[index]) {
+		index++
+	}
 	for wrapperDepth := 0; index < len(words) && wrapperDepth < 64; wrapperDepth++ {
-		for index < len(words) && shellAssignmentWord(words[index]) {
-			index++
-		}
-		if index >= len(words) {
-			return nil, false
-		}
 		word := words[index]
 		switch filepath.Base(word) {
 		case "htpasswd":
