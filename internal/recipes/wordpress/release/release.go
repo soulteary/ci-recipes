@@ -36,6 +36,7 @@ var (
 	pinnedOfficialImage = regexp.MustCompile(`^wordpress:[^@\s]+@sha256:[0-9a-f]{64}$`)
 	pinnedDigest        = regexp.MustCompile(`^sha256:[0-9a-f]{64}$`)
 	composeBuild        = regexp.MustCompile(`(?m)^[ \t]+build:$`)
+	localCoreUpdateCopy = regexp.MustCompile(`(?m)^COPY[ \t]+(?:plugins/)?sqlite-local-core-update\.php[ \t]+`)
 )
 
 // DigestResolver resolves an image tag to its registry manifest digest.
@@ -238,6 +239,9 @@ func ExecuteWithOptions(ctx context.Context, args []string, stdin io.Reader, std
 	} else if !strings.Contains(compose, "image: soulteary/sqlite-wordpress:"+releaseVersion) {
 		return cli.Exit(1, "docker-compose.yml does not use the %s image tag", releaseVersion)
 	}
+	if !localCoreUpdateCopy.MatchString(dockerfile) {
+		return cli.Exit(1, "Dockerfile does not package the local WordPress core update integration")
+	}
 
 	checks := []struct {
 		content string
@@ -252,7 +256,6 @@ func ExecuteWithOptions(ctx context.Context, args []string, stdin io.Reader, std
 		{string(licensesBytes), "Apache-2.0 AND GPL-2.0-or-later", "LICENSES.md does not document the OCI image license expression"},
 		{string(versioningBytes), "YYYY.MM.DD-rN", "VERSIONING.md does not document the CalVer release format"},
 		{string(changelogBytes), "## [" + releaseVersion + "]", "CHANGELOG.md does not contain a " + releaseVersion + " release section"},
-		{dockerfile, "COPY sqlite-local-core-update.php", "Dockerfile does not package the local WordPress core update integration"},
 	}
 	for _, check := range checks {
 		if ctxErr := ctx.Err(); ctxErr != nil {
