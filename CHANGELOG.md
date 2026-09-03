@@ -27,3 +27,5 @@ All notable changes to this project will be documented in this file.
   command or comment boundaries.
 - Reject symlinked Grantseal release-archive candidates instead of silently
   treating the archive directory as empty.
+- Preserve Stargate shell logical-line state so comments after an unquoted
+  continuation are not misread as Markdown root prompts.
