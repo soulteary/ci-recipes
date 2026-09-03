@@ -235,10 +235,16 @@ func quoteStartsEnvSplitOperand(arguments []string, afterSpace bool) bool {
 }
 
 func shellCommentStart(text string, index int) bool {
-	if index == 0 {
-		return true
+	for index > 0 {
+		previous := index - 1
+		// An unquoted backslash-newline pair is removed before shell tokenization.
+		if (text[previous] == '\n' || text[previous] == '\r') && previous > 0 && text[previous-1] == '\\' {
+			index = previous - 1
+			continue
+		}
+		return strings.ContainsRune(" \t;&|()<>", rune(text[previous]))
 	}
-	return strings.ContainsRune(" \t;&|()<>", rune(text[index-1]))
+	return true
 }
 
 func markdownRootPrompt(text string, lineStart, index int) bool {
