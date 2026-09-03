@@ -65,6 +65,8 @@ func TestUnsafeHTPasswdBatchInvocations(t *testing.T) {
 		{name: "later command", text: `htpasswd -nBC 10 stargate; printf '%s\\n' -b`},
 		{name: "pipeline boundary", text: `htpasswd -nBC 10 stargate | sed -n -b`},
 		{name: "shell comment", text: `htpasswd -nBC 10 stargate # never add -b`},
+		{name: "comment after line continuation", text: "htpasswd -nBC 10 stargate \\\n# htpasswd -bn user pass"},
+		{name: "root prompt after completed line", text: "htpasswd -nBC 10 stargate\n# htpasswd -bn user pass", want: 1},
 		{name: "comment before separator", text: `echo ok # avoid this; htpasswd -C 10 -bn "" password`},
 		{name: "comment line before separator", text: `# explanation; htpasswd -C 10 -bn "" password`},
 		{name: "comment after separator", text: `echo ok; # avoid this; htpasswd -C 10 -bn "" password`},
