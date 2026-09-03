@@ -38,7 +38,7 @@ LABEL org.opencontainers.image.revision="${IMAGE_REVISION}"
 LABEL org.opencontainers.image.base.name="docker.io/library/wordpress:7.1.0-php8.5-apache"
 LABEL org.opencontainers.image.base.digest="` + testDigest + `"
 LABEL org.opencontainers.image.licenses="Apache-2.0 AND GPL-2.0-or-later"
-COPY sqlite-local-core-update.php /tmp/
+COPY plugins/sqlite-local-core-update.php /tmp/
 `
 	return fstest.MapFS{
 		"Dockerfile":         {Data: []byte(dockerfile)},
@@ -81,6 +81,19 @@ func TestExecuteValidRelease(t *testing.T) {
 		"rust_toolchain=1.98.0\n"
 	if stdout != want {
 		t.Fatalf("stdout = %q, want %q", stdout, want)
+	}
+}
+
+func TestExecuteLegacyRootPluginSource(t *testing.T) {
+	t.Parallel()
+	fixture := cloneFS(validFS())
+	fixture["Dockerfile"].Data = []byte(strings.ReplaceAll(
+		string(fixture["Dockerfile"].Data),
+		"COPY plugins/sqlite-local-core-update.php",
+		"COPY sqlite-local-core-update.php",
+	))
+	if _, err := execute(t, []string{testVersion}, fixture, Options{}); err != nil {
+		t.Fatalf("legacy root plugin source error = %v", err)
 	}
 }
 
@@ -161,7 +174,7 @@ func TestExecuteRepositoryValidation(t *testing.T) {
 		{name: "versioning documentation", file: "VERSIONING.md", mutate: func(string) string { return "CalVer\n" }, want: "does not document"},
 		{name: "changelog", file: "CHANGELOG.md", mutate: func(string) string { return "# Changelog\n" }, want: "release section"},
 		{name: "core update integration", file: "Dockerfile", mutate: func(s string) string {
-			return strings.ReplaceAll(s, "COPY sqlite-local-core-update.php", "COPY another.php")
+			return strings.ReplaceAll(s, "COPY plugins/sqlite-local-core-update.php", "COPY another.php")
 		}, want: "does not package"},
 	}
 
