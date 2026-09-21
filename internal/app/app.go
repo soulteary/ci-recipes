@@ -10,6 +10,7 @@ import (
 	"github.com/soulteary/ci-recipes/internal/cli"
 	errortracerrelease "github.com/soulteary/ci-recipes/internal/recipes/errortracer/release"
 	"github.com/soulteary/ci-recipes/internal/recipes/grantseal"
+	"github.com/soulteary/ci-recipes/internal/recipes/runnerfleet"
 	stargatechecks "github.com/soulteary/ci-recipes/internal/recipes/stargate/checks"
 	stargaterelease "github.com/soulteary/ci-recipes/internal/recipes/stargate/release"
 	wordpresscosign "github.com/soulteary/ci-recipes/internal/recipes/wordpress/cosign"
@@ -59,6 +60,8 @@ var commands = []command{
 	{"grantseal", "check-writeback-allowlist", "", "restrict staged CI report writeback paths", 0, prefix2(grantseal.Execute, "writeback", "allowlist")},
 	{"grantseal", "inject-report-environment", "[REPORT_JSON]", "atomically replace report environment metadata", 0, prefix2(grantseal.Execute, "report", "inject-environment")},
 	{"grantseal", "generate-quality-docs", "[REPO_ROOT]", "atomically render localized quality documentation", 0, prefix2(grantseal.Execute, "quality", "docs")},
+	{"runner-fleet", "check-version-consistency", "[ROOT] [--config FILE]", "enforce one version number across docs, examples and build files", 0, prefix(runnerfleet.Execute, "version-consistency")},
+	{"runner-fleet", "check-docs-structure", "[ROOT] [--config FILE]", "enforce translated documentation section structure", 0, prefix(runnerfleet.Execute, "docs-structure")},
 }
 
 func prefix(run executor, first string) executor {

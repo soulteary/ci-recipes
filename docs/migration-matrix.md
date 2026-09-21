@@ -73,12 +73,39 @@ Source: `soulteary/grantseal@ff359454cd26fd691dd67a77f06faacfecbd1d69`
 `check-doc-language` also accepts `--allowlist FILE`, and
 `generate-quality-docs` accepts an optional repository root.
 
+## Runner Fleet
+
+Source: `soulteary/runner-fleet@d295d4bc20ace9c942073b856ac12718313270d4`
+
+| Shell file | Go replacement |
+|---|---|
+| `scripts/check-version-consistency.sh` | `runner-fleet check-version-consistency` |
+| `scripts/check-docs-structure.sh` | `runner-fleet check-docs-structure` |
+
+These are the only two shell files Runner Fleet's workflows execute as a check,
+both from its `CI (Consistency)` workflow and from its `make check` target. The
+recipes read repository-owned settings from `scripts/ci-recipes.conf`, so the
+baseline path and regex, the ignore marker, the scanned pathspecs, and the
+documentation language and file lists stay in the audited repository; the
+defaults reproduce the audited behavior when that file is absent.
+
+Three fail-open conditions in the shell were reproduced during the audit and are
+regression tests here: a swallowed `git ls-files` status that turned a refused
+enumeration into a green check, an unquoted `for` loop that dropped any path
+containing a space, and an absent documentation tree that compared nothing and
+printed its all-clear. A fence-tracking defect that recognized backticks but not
+tildes is covered too; it both mismodelled tilde-fenced documents and reported
+structurally identical translations as wrong.
+
 ## Audited and excluded
 
 | Source snapshot | Script | Reason |
 |---|---|---|
 | `soulteary/apt-proxy@1f7144d6b814e4f1dd4fe249043a907367a11bd5` | `scripts/add_license_header.sh` | No workflow or Makefile target invokes it. |
 | `soulteary/webhook@413e876646ae61d183aba8825b8ef7de7c0596a5` | `scripts/test-coverage.sh` | No workflow invokes it; it is documented as a local helper. |
+| `soulteary/runner-fleet@d295d4bc20ace9c942073b856ac12718313270d4` | `scripts/install-runner.sh` | Runtime entrypoint: shipped into the Manager image and run by an operator through `docker exec` or by the registration job, not by CI. |
+| `soulteary/runner-fleet@d295d4bc20ace9c942073b856ac12718313270d4` | `examples/deploy/standalone/run.sh` | Deployment example, run by hand. |
+| `soulteary/runner-fleet@d295d4bc20ace9c942073b856ac12718313270d4` | `.github/actions/detect-go-module-root/action.yml` | Inline workflow shell in a composite action. |
 
 Runtime entrypoints, examples, Bash test files outside the linked script
 directories, and inline workflow shell blocks are outside this migration.
