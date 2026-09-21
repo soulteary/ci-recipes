@@ -10,12 +10,16 @@ their documented codes.
 
 The initial migration covers only scripts that are reachable from the current
 GitHub Actions workflows of Stargate, Docker SQLite WordPress, Error-Tracer,
-and Grantseal. Shell self-test behavior is covered by Go regression tests.
+Grantseal, and Runner Fleet. Shell self-test behavior is covered by Go
+regression tests.
 Stargate's Go-version and release-workflow self-tests also enforce contracts on
 the checked-out repository, so that behavior remains available as public
 `check-*` commands; the other test scripts do not become executables. Scripts
 in `apt-proxy/scripts` and `webhook/scripts` were audited but are not included
-because their current workflows do not execute them.
+because their current workflows do not execute them. Runner Fleet's runtime
+runner installer, its standalone deployment example, and its composite action
+are excluded for the same boundary reason: nothing in a workflow calls them as
+a CI check.
 
 ## Install
 
@@ -134,6 +138,59 @@ trailing payloads, and cross-platform absolute paths fail closed. The accepted
 artifact subset is canonical `tar.gz` plus stored/deflated ZIP entries; ZIP64,
 alternate ZIP compression, named/commented gzip headers, and opaque PAX or ZIP
 metadata are intentionally rejected.
+
+### Runner Fleet
+
+```console
+ci-recipes runner-fleet check-version-consistency [ROOT] [--config FILE]
+ci-recipes runner-fleet check-docs-structure [ROOT] [--config FILE]
+```
+
+Both recipes replace shell that reported success in situations where it had
+checked nothing. `check-version-consistency` built its file list inside a
+command substitution ending in `|| true`, so a `git ls-files` that refused to
+run — no work tree, an unreadable index, or a bind-mounted repository git
+rejects with `detected dubious ownership` — was indistinguishable from an empty
+match and produced a green check; its unquoted `for` loop also dropped any path
+containing a space. `check-docs-structure` skipped a document whose English
+original was absent, so a run with no documentation tree compared nothing and
+still printed its all-clear, and it recognized only one of Markdown's two fence
+markers, which both mismodelled tilde-fenced documents and reported
+structurally identical translations as wrong. Here a failed enumeration, an
+unreadable file, and a run that compared nothing are all failures of the check:
+policy violations exit 1, unusable input or infrastructure exits 2. `git
+ls-files` is invoked with `-z`, so paths containing spaces, newlines or
+non-ASCII bytes need no unquoting and cannot be silently skipped.
+
+Both recipes read `scripts/ci-recipes.conf` from the repository root, or the
+file named by `--config`. The file is optional — its absence means the defaults,
+which are Runner Fleet's current behavior — but it is where the facts that
+belong to the repository live, so that changing them is a commit there rather
+than a release here. `KEY = VALUE` lines, `#` comments, an unknown key is an
+error, and a list-valued key replaces the default on its first appearance and
+appends on later ones:
+
+```ini
+version_source = internal/config/config.go
+version_baseline_regex = tag = "(v[0-9]+\.[0-9]+\.[0-9]+)"
+version_reference_regex = (v[0-9]+\.[0-9]+\.[0-9]+)
+version_reference_regex = main\.Version=([0-9]+\.[0-9]+\.[0-9]+) => v${1}
+version_ignore_marker = version-check-ignore
+version_globs = *.md *.yml *.yaml *.example Makefile *Dockerfile* *.sh *.go
+version_exclude = CHANGELOG.md
+docs_root = docs
+docs_languages = zh fr de ko ja
+docs_files = development.md guide.md README.md
+```
+
+`version_globs` entries are Git pathspecs, so matching stays exactly what
+`git ls-files` does rather than a reimplementation. A reference regex captures
+the version in group 1 and may carry a `=> TEMPLATE` replacement, which is what
+lets an ldflags assignment such as `main.Version=1.6.0` be compared as
+`v1.6.0`. Operator-facing messages stay in the original Chinese and the GitHub
+annotation format is preserved, so migrating a workflow does not change what a
+contributor reads on a pull request; the one deliberate wording change is that
+the remediation hint says to rerun the check rather than the script.
 
 ## Migration inventory
 

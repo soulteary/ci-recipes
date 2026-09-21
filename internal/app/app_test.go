@@ -42,6 +42,8 @@ var publicCommandSpecs = []publicCommandSpec{
 	{"grantseal", "check-writeback-allowlist", "", 0},
 	{"grantseal", "inject-report-environment", "[REPORT_JSON]", 0},
 	{"grantseal", "generate-quality-docs", "[REPO_ROOT]", 0},
+	{"runner-fleet", "check-version-consistency", "[ROOT] [--config FILE]", 0},
+	{"runner-fleet", "check-docs-structure", "[ROOT] [--config FILE]", 0},
 }
 
 func TestHelpListsOnlyActiveSources(t *testing.T) {
@@ -51,7 +53,7 @@ func TestHelpListsOnlyActiveSources(t *testing.T) {
 		t.Fatal(err)
 	}
 	text := output.String()
-	for _, expected := range []string{"stargate:", "docker-sqlite-wordpress:", "error-tracer:", "grantseal:"} {
+	for _, expected := range []string{"stargate:", "docker-sqlite-wordpress:", "error-tracer:", "grantseal:", "runner-fleet:"} {
 		if !strings.Contains(text, expected) {
 			t.Errorf("help missing %q", expected)
 		}
