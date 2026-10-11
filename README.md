@@ -1,5 +1,7 @@
 # CI Recipes
 
+[![Go Test Coverage](./.github/coverage.svg)](./.github/go-test-report.md) [![Go Report Card](./.github/goreportcard.svg)](./.github/goreportcard-report.md)
+
 `ci-recipes` replaces repository-specific CI shell programs with one tested,
 cross-platform Go binary. Each recipe keeps the success, failure, output, and
 side-effect contract used by valid CI invocations while removing shell
