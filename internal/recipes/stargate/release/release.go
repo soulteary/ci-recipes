@@ -208,7 +208,7 @@ func validateImage(image string) error {
 }
 
 func usage(message string) error {
-	return cli.Exit(2, "usage: ci-recipes stargate "+message)
+	return cli.Exit(2, "usage: ci-recipes stargate %s", message)
 }
 
 func executeExtract(args []string, stdout io.Writer, opts Options) error {

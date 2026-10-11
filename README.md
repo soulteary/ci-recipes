@@ -37,7 +37,7 @@ go build -trimpath -o ./bin/ci-recipes ./cmd/ci-recipes
 go test ./...
 ```
 
-The module requires Go 1.22 or newer. The recipe implementation uses the Go
+The module requires Go 1.27.2 or newer. The recipe implementation uses the Go
 standard library. A recipe invokes an external program only when that program
 is the actual trust or build boundary: `go`, `git`, `gh`, `docker`, or
 `cosign`. No recipe launches a shell.
@@ -205,10 +205,10 @@ boundaries. Tests use temporary repositories, deterministic archives, fake
 registries, and fake external commands; they do not require live network
 access.
 
-CI runs `go test -count=1 ./...` and a `-trimpath` build on Ubuntu with Go
-1.22.x and Go 1.27.x, and on macOS and Windows with Go 1.27.x. Its Ubuntu Go
-1.27.x quality job formats the tree and requires a clean diff, then runs the
-race detector and `go vet`. Equivalent local checks are:
+CI runs `go test -count=1 ./...` and a `-trimpath` build on Ubuntu,
+macOS and Windows with Go 1.27.2. Its Ubuntu quality job formats the tree
+and requires a clean diff, then runs the race detector and `go vet`.
+Equivalent local checks are:
 
 ```console
 gofmt -w .
