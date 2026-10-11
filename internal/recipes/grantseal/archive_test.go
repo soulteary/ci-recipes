@@ -426,6 +426,30 @@ func TestBaseImageLinksStayWithinAllowlist(t *testing.T) {
 	}
 }
 
+func TestPinnedBaseRuntimeEntries(t *testing.T) {
+	for _, test := range []struct {
+		name   string
+		member imageMember
+		want   bool
+	}{
+		{"empty exported console", imageMember{Path: "dev/console", Mode: "0755", Type: tar.TypeReg, Regular: true, TypeKnown: true, SHA256: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"}, true},
+		{"populated console", imageMember{Path: "dev/console", Mode: "0755", Type: tar.TypeReg, Regular: true, TypeKnown: true, SHA256: strings.Repeat("a", 64)}, false},
+		{"console wrong mode", imageMember{Path: "dev/console", Mode: "0777", Type: tar.TypeReg, Regular: true, TypeKnown: true, SHA256: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"}, false},
+		{"console symlink", imageMember{Path: "dev/console", Mode: "0777", Type: tar.TypeSymlink, TypeKnown: true, Linkname: "/etc/localtime"}, false},
+		{"pinned tzdata localtime", imageMember{Path: "usr/share/zoneinfo/localtime", Mode: "0777", Type: tar.TypeSymlink, TypeKnown: true, Linkname: "/etc/localtime"}, true},
+		{"localtime wrong target", imageMember{Path: "usr/share/zoneinfo/localtime", Mode: "0777", Type: tar.TypeSymlink, TypeKnown: true, Linkname: "/etc/shadow"}, false},
+		{"localtime hardlink", imageMember{Path: "usr/share/zoneinfo/localtime", Mode: "0777", Type: tar.TypeLink, TypeKnown: true, Linkname: "etc/localtime"}, false},
+		{"localtime regular replacement", imageMember{Path: "usr/share/zoneinfo/localtime", Mode: "0644", Type: tar.TypeReg, TypeKnown: true, Regular: true}, false},
+		{"other zoneinfo link outside tree", imageMember{Path: "usr/share/zoneinfo/other", Mode: "0777", Type: tar.TypeSymlink, TypeKnown: true, Linkname: "/etc/localtime"}, false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			if got := imageMemberSafe(test.member) && baseImageMemberAllowed(test.member); got != test.want {
+				t.Fatalf("allowed = %v, want %v", got, test.want)
+			}
+		})
+	}
+}
+
 func TestArchiveImageWithInjectedRunner(t *testing.T) {
 	// Exercise the explicit missing-Docker compatibility path.
 	deps := testDeps(t.TempDir())
