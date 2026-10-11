@@ -62,7 +62,7 @@ jobs:
         run: go test -race -count=1 ./...
         if: "!(github.event_name == 'pull_request')"
       - name: Remove stale generated report evidence
-        if: "github.event_name == 'pull_request'"
+        if: always() && (github.event_name == 'pull_request')
         shell: bash
         run: |
           set -euo pipefail
