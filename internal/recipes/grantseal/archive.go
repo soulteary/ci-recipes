@@ -1393,7 +1393,17 @@ func baseImageMemberAllowed(member imageMember) bool {
 		return true
 	}
 	if member.Path == "dev/console" {
-		return member.Type == tar.TypeChar
+		// Docker export may materialize its runtime console as an empty regular
+		// file instead of a character device. Accept only the observed empty
+		// 0755 placeholder; populated files and links remain forbidden.
+		return member.Type == tar.TypeChar || member.Regular && member.Mode == "0755" &&
+			member.SHA256 == "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+	}
+	// The pinned static-debian13 tzdata layer contains this exact symlink.
+	// Its target is intentionally outside the zoneinfo tree; do not extend
+	// this exception to any other link or permit a regular-file replacement.
+	if member.Path == "usr/share/zoneinfo/localtime" {
+		return member.Type == tar.TypeSymlink && member.Linkname == "/etc/localtime"
 	}
 	if member.Regular {
 		_, mustBeLink := grantsealBaseImageLinkPaths[member.Path]
