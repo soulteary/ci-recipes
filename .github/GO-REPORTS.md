@@ -1,7 +1,7 @@
 # Go report workflow
 
 The PR job runs both owned Actions with `commit: false` and released CLIs
-(`go-test-report-action v1.1.2`, `goreportcard-action v1.1.3`, pinned wrapper SHAs).
+(`go-test-report-action v1.1.3`, `goreportcard-action v1.1.4`, pinned wrapper SHAs).
 It replaces the primary Linux Go test/coverage invocation and reuses its profile
 for existing coverage artifacts/gates. Other OS matrices, release verification,
 integration, benchmarks and fuzz workflows retain their distinct checks.
