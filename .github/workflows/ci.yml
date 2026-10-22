@@ -21,11 +21,11 @@ jobs:
       matrix:
         include:
           - os: ubuntu-latest
-            go: 1.27.2
+            go: 1.27.3
           - os: macos-latest
-            go: 1.27.2
+            go: 1.27.3
           - os: windows-latest
-            go: 1.27.2
+            go: 1.27.3
     runs-on: ${{ matrix.os }}
     timeout-minutes: 15
     steps:
